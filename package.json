@@ -1,0 +1,30 @@
+{
+  "name": "omo-plutus",
+  "version": "0.1.0",
+  "description": "Quality-optimal legal assignment emitter for oh-my-opencode — reads subscription quota + token history, joins against oh-my-openagent fallback chains and live model availability, solves a per-slot assignment, emits a schema-validated oh-my-opencode.json plus an auditable plutus-report.md.",
+  "license": "SUL-1.0",
+  "type": "module",
+  "bin": {
+    "plutus": "src/cli/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "plutus": "bun run src/cli/index.ts"
+  },
+  "dependencies": {
+    "citty": "^0.1.6",
+    "oh-my-openagent": "^4.19.4",
+    "acorn": "^8.15.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

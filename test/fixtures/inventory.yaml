@@ -1,0 +1,16 @@
+# omo-plutus fixture inventory — valid declared inventory for scenario S1 (W0.3/W0.4).
+# Trust taxonomy: {remote_api, local_estimation, user_declared} (bundle §4).
+# cap: remaining subscription quota 0..1, or null = uncapped (metered/overflow-only) — NEVER apply σ to null.
+version: 1
+providers:
+  openai:
+    cap: 0.8
+    window_resets: "2026-08-15T00:00:00Z"
+    trust: remote_api
+  opencode-go:
+    cap: 0.9
+    window_resets: "2026-08-15T00:00:00Z"
+    trust: local_estimation
+  deepseek:
+    cap: null
+    trust: user_declared

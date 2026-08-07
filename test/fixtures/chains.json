@@ -1,0 +1,31 @@
+{
+  "agents": {
+    "librarian": {
+      "fallbackChain": [
+        { "providers": ["openai"], "model": "gpt-5.6-luna-fast", "variant": "low" },
+        { "providers": ["deepseek"], "model": "deepseek-v4-flash", "variant": "max" },
+        { "providers": ["vercel"], "model": "minimax-m2.7-highspeed" }
+      ]
+    },
+    "explore": {
+      "fallbackChain": [
+        { "providers": ["openai"], "model": "gpt-5.6-luna-fast", "variant": "low" },
+        { "providers": ["deepseek"], "model": "deepseek-v4-flash", "variant": "max" }
+      ]
+    }
+  },
+  "categories": {
+    "ultrabrain": {
+      "fallbackChain": [
+        { "providers": ["openai"], "model": "gpt-5.6-sol", "variant": "xhigh" },
+        { "providers": ["deepseek"], "model": "deepseek-v4-pro" }
+      ]
+    },
+    "quick": {
+      "fallbackChain": [
+        { "providers": ["openai"], "model": "gpt-5.4-nano" },
+        { "providers": ["deepseek"], "model": "deepseek-v4-flash" }
+      ]
+    }
+  }
+}

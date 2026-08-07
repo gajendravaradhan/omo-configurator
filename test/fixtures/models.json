@@ -1,0 +1,31 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "models": {
+      "gpt-5.6-luna-fast": { "id": "gpt-5.6-luna-fast", "family": "gpt-luna", "reasoning": false, "tool_call": true },
+      "gpt-5.6-sol": { "id": "gpt-5.6-sol", "family": "gpt-sol", "reasoning": true, "tool_call": true },
+      "gpt-5.4-nano": { "id": "gpt-5.4-nano", "family": "gpt-nano", "reasoning": false, "tool_call": true }
+    }
+  },
+  "deepseek": {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "models": {
+      "deepseek-v4-flash": { "id": "deepseek-v4-flash", "family": "deepseek-flash", "reasoning": false, "tool_call": true },
+      "deepseek-v4-pro": { "id": "deepseek-v4-pro", "family": "deepseek", "reasoning": true, "tool_call": true }
+    }
+  },
+  "vercel": {
+    "id": "vercel",
+    "name": "Vercel",
+    "models": {
+      "minimax-m2.7-highspeed": { "id": "minimax-m2.7-highspeed", "family": "minimax", "reasoning": false, "tool_call": true }
+    }
+  },
+  "opencode-go": {
+    "id": "opencode-go",
+    "name": "OpenCode Go",
+    "models": {}
+  }
+}
