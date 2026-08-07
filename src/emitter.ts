@@ -16,7 +16,7 @@
 // W4.4: fallback lists are capped at 5 entries.
 // Pinned sidecar: ~/.config/omo-plutus/pinned.json ({ version, slots: string[] }) — NEVER written
 // into oh-my-opencode.json (schema additionalProperties:false at 3 levels, bundle §2 fact 1).
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Assignment } from "./types.ts";
 import { assertValidConfig, validateOpencodeOwned } from "./validate.ts";
@@ -251,7 +251,20 @@ export function emitOmoConfig(assignments: Assignment[], outputPath: string, opt
 
   const tmp = `${outputPath}.tmp.${process.pid}`;
   writeFileSync(tmp, JSON.stringify(container, null, 2) + "\n", "utf8");
-  renameSync(tmp, outputPath);
+  try {
+    renameSync(tmp, outputPath);
+  } catch (e: unknown) {
+    // EBUSY = the target is a single-file bind mount (e.g. /root/.omo/omo.jsonc in the NAS
+    // container) — rename over a mount point is impossible. Fall back to in-place write,
+    // which is exactly how OMO itself writes its config; the backup above still protects us.
+    if ((e as NodeJS.ErrnoException).code === "EBUSY") {
+      writeFileSync(outputPath, readFileSync(tmp, "utf8"), "utf8");
+      rmSync(tmp, { force: true });
+    } else {
+      rmSync(tmp, { force: true });
+      throw e;
+    }
+  }
 
   return { configPath: outputPath, backupPath };
 }
