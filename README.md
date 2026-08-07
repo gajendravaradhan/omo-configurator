@@ -147,7 +147,7 @@ plutus optimize [OPTIONS]
   -c, --config PATH   Path to inventory.yaml
       --mode MODE     Solve mode (v1: absolute-best; adaptive is a refusing stub)
       --output PATH   oh-my-opencode.json target (default ~/.config/opencode/oh-my-opencode.json)
-      --db-path PATH  Override opencode.db path (read-only, for future token-history reads)
+      --db-path PATH  Override opencode.db path (read-only, per-agent token history)
       --no-merge      Do not deep-merge into existing config (emit fresh)
 ```
 
@@ -167,7 +167,11 @@ What it does, in order:
 7. **Doctor soft-check** — runs `bun x oh-my-opencode doctor --verbose --json`, records the
    Models check and whether a `system-default` marker appeared (soft: warn, never block).
 8. **Appends one telemetry line** to `history.jsonl` (the v2 training input — P3).
-9. **Writes `plutus-report.md`** — the full audit surface.
+9. **Reads per-agent token history** from `opencode.db` (read-only — `--db-path` to
+   override; `PRAGMA query_only` + `mode=ro`, SPIKE-02 RESOLVED 2026-08-07). Missing db →
+   honest "consumption estimates only" note.
+10. **Writes `plutus-report.md`** — the full audit surface, including the Token history
+    table (per agent × model) when the db is present.
 
 ```bash
 # Example
@@ -504,9 +508,12 @@ boundary statement, then:
   projected cost, trusted, binding constraint.
 - **Rationale** — why each primary won (quality score + binding constraint).
 - **Assumptions & trust levels** — inventory providers, per-provider trust, cost proxy
-  caveat, the NAS opencode.db caveat (token history not read in v1), mode, pinned chain
-  SHA, schema `$id`, omo version probed (P8), emit-shape record, P6 stale-tier flags.
+  caveat, token-history status (read from opencode.db vs estimates-only), mode, pinned
+  chain SHA, schema `$id`, omo version probed (P8), emit-shape record, P6 stale-tier flags.
 - **Doctor soft-check** section — the Models check + system-default marker observation.
+- **Token history** section (when opencode.db is present) — per agent × model: calls,
+  input/output/reasoning/cache tokens, total, cost. Read-only (SPIKE-02, RESOLVED
+  2026-08-07).
 
 > The report is as important as the config. A recommendation you can't audit is worthless.
 
@@ -538,6 +545,7 @@ src/
   validate.ts         local-schema validation (primary gate) + schemaInfo
   verify.ts           doctor soft-check
   ledger.ts           append-only telemetry (P3)
+  tokens-history.ts   read-only per-agent token history from opencode.db (SPIKE-02)
   report.ts           plutus-report.md writer
   errors.ts           PlutusError (carries exit code)
   challenge.ts        W6.1 stub (pin + comparator scaffold)
@@ -546,18 +554,18 @@ snapshots/chains.json    vendored chain snapshot (drift baseline)
 scripts/vendor-snapshot.ts  regenerate the snapshot
 spikes/SPIKE-06.md       Go request-tiered accounting finding (UNVERIFIED, locked decision)
 tiers.json               static capability tiers with P6 provenance
-test/                    10 test files, 54 tests, 753 assertions
+test/                    11 test files, 58 tests, 768 assertions
 ```
 
 ### Testing
 
 ```bash
-bun test              # 54 tests across 10 files (753 assertions)
+bun test              # 58 tests across 11 files (768 assertions)
 bun run tsc --noEmit  # typecheck (strict)
 ```
 
 Test files: `chain`, `check-chains`, `discover`, `emitter`, `inventory`, `ledger`,
-`optimize`, `rollback`, `solver`, `stubs`. Fixtures live in `test/fixtures/` (a small
+`optimize`, `rollback`, `solver`, `stubs`, `tokens-history`. Fixtures live in `test/fixtures/` (a small
 hermetic `models.json` + `inventory.yaml`, plus `w2/` variants for solver scenarios).
 
 The scenario contract covered:
@@ -570,6 +578,8 @@ The scenario contract covered:
 - **S4** edge — merge preserves user keys, skips pinned slots, replaces only owned keys
 - **S5** regression — illegal key → schema validation fails with exit 2, target untouched
 - **S6** feature — DeepSeek injected after GPT, before MiniMax, never `hephaestus`
+- **D6** feature — per-agent token history read read-only from `opencode.db`
+  (`GROUP BY agent, model`); missing db → honest "estimates only"
 
 ### Vendored snapshots & drift
 
@@ -589,22 +599,22 @@ The pinned SHA (sha256 of `dist/index.js`) is your audit trail — when omo's ch
 
 - **No budget enforcement.** v1 emits quality-optimal legal assignments and reports
   projected consumption. Live budget coupling, shadow prices, and adaptive rebalancing are
-  **v2**, gated on SPIKE-02 (per-agent attribution) and SPIKE-06 (Go accounting).
+  **v2**, gated on SPIKE-06 (Go accounting) and the A1–A3 research questions.
 - **Go (opencode-go) capacity is UNVERIFIED** — see `spikes/SPIKE-06.md`. Until a real
   billing source exists, Go is treated as overflow-only + 1× over-estimate + a loud warning.
 - **`plutus challenge` is a stub** — it pins the challenger and scaffolds the comparator,
-  but real session runs need the v2 session harness (SPIKE-02).
+  but real session runs need the v2 session harness.
 - **`--mode=adaptive` refuses** (exit 3) until A1–A3 research questions are resolved.
 - **LOC note:** ~1,600 code lines vs the 1,560 hard stop — every over-budget line maps to a
   required deliverable or patch surface (documented deviation, no slop).
-- **Per-slot attribution** of tokens (which agent consumed what) is not attempted — the
-  ledger records per-slot *assignments* + per-provider *quota snapshots*, not per-slot
-  consumption.
+- **Per-agent attribution is read-only telemetry today**: `optimize` reads `opencode.db`
+  (SPIKE-02 RESOLVED) and reports per agent × model consumption, but the ledger still
+  records per-slot *assignments* + per-provider *quota snapshots* — the read is diagnostic,
+  not yet wired into budget coupling.
 
-**Roadmap (v2):** live budget coupling via the ledger's accumulated history, adaptive
-rebalancing + downgrade patches, the real challenger session harness, Go tier accounting
-once SPIKE-06 is re-opened with real billing data, and per-slot token attribution when
-`opencode.db` exposes a session→agent mapping.
+**Roadmap (v2):** live budget coupling via the ledger's accumulated history + the
+token-history read, adaptive rebalancing + downgrade patches, the real challenger session
+harness, and Go tier accounting once SPIKE-06 is re-opened with real billing data.
 
 ---
 

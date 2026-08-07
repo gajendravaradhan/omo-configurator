@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { Assignment, SolveResult, TrustSource } from "./types.ts";
 import { staleTierFamilies, type Tiers } from "./quality.ts";
 import type { DoctorSummary } from "./verify.ts";
+import type { TokenHistoryResult } from "./tokens-history.ts";
 
 /** P2 — verbatim v1 product-boundary statement; must head EVERY plutus-report.md. */
 export const V1_BOUNDARY_STATEMENT =
@@ -25,6 +26,7 @@ export interface ReportOpts {
   tiers?: Tiers;
   trustLevels?: Record<string, TrustSource>;
   doctor?: DoctorSummary;
+  tokenHistory?: TokenHistoryResult;
 }
 
 /** The slot's binding constraint — why this candidate was chosen (quality score + capacity rule). */
@@ -76,8 +78,12 @@ export function renderReport(
       lines.push(`  - ${pid}: ${trust}`);
     }
   }
-  lines.push("- Projected cost is a per-token input+output proxy (P5 tiebreak #1); real consumption requires token history");
-  lines.push("- NAS opencode.db caveat: token history was NOT read in v1 (thin-terminal/NAS db is non-canonical; use --db-path if wiring it later) — consumption figures are estimates, not metered totals");
+  lines.push("- Projected cost is a per-token input+output proxy (P5 tiebreak #1); real consumption is metered in the Token history section when opencode.db is present");
+  if (opts.tokenHistory && opts.tokenHistory.available) {
+    lines.push(`- Token history: read from ${opts.tokenHistory.dbPath} (read-only, SPIKE-02 RESOLVED 2026-08-07)`);
+  } else {
+    lines.push("- Token history: NOT read — no opencode.db found at the resolved path (consumption figures are estimates, not metered totals; use --db-path if the canonical db lives elsewhere)");
+  }
   if (opts.mode) lines.push(`- Mode: ${opts.mode}`);
   if (opts.chainSha) lines.push(`- Pinned chain SHA: ${opts.chainSha}`);
   if (opts.schemaId) lines.push(`- Schema $id: ${opts.schemaId}`);
@@ -102,6 +108,18 @@ export function renderReport(
       for (const note of opts.doctor.notes) lines.push(`- ${note}`);
     } else {
       lines.push("- doctor did not run — see console warnings (soft)");
+    }
+    lines.push("");
+  }
+
+  if (opts.tokenHistory && opts.tokenHistory.available && opts.tokenHistory.rows.length > 0) {
+    lines.push("## Token history (per agent × model, read-only from opencode.db)", "");
+    lines.push("| agent | model | calls | input | output | reasoning | cache read | cache write | total | cost |");
+    lines.push("|---|---|---|---|---|---|---|---|---|---|");
+    for (const r of opts.tokenHistory.rows) {
+      lines.push(
+        `| ${r.agent} | ${r.model} | ${r.calls} | ${r.inputTokens} | ${r.outputTokens} | ${r.reasoningTokens} | ${r.cacheRead} | ${r.cacheWrite} | ${r.totalTokens} | ${r.cost > 0 ? `$${r.cost.toFixed(4)}` : "$0"} |`,
+      );
     }
     lines.push("");
   }

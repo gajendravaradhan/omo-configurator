@@ -12,6 +12,7 @@ import { writeReport, ALL_UNTRUSTED_BANNER } from "./report.ts";
 import { schemaInfo } from "./validate.ts";
 import { doctorSoftCheck } from "./verify.ts";
 import { appendLedger, buildLedgerEntry } from "./ledger.ts";
+import { readTokenHistory } from "./tokens-history.ts";
 import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
@@ -75,6 +76,15 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   const trustLevels = Object.fromEntries(Object.entries(inventory.providers).map(([pid, p]) => [pid, p.trust]));
   appendLedger(buildLedgerEntry(solve, caps, trustLevels, chainSha, args.mode));
 
+  // D6 (SPIKE-02 RESOLVED): read per-agent token history read-only — the --db-path flag
+  // was plumbed since W0 but never consumed; now it feeds the report's Token history section.
+  const tokenHistory = readTokenHistory(args.dbPath);
+  if (!tokenHistory.available) {
+    console.log(`[plutus] token history: not read (no opencode.db at ${tokenHistory.dbPath}) — consumption estimates only`);
+  } else {
+    console.log(`[plutus] token history: read ${tokenHistory.rows.length} agent×model rows from ${tokenHistory.dbPath} (read-only)`);
+  }
+
   const reportPath = writeReport(solve, dirname(args.outputPath), {
     schemaId: schemaInfo().id,
     chainSha,
@@ -83,6 +93,7 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
     tiers,
     trustLevels,
     doctor,
+    tokenHistory,
     inventoryNames: Object.keys(inventory.providers),
   });
 
