@@ -35,12 +35,13 @@ export function schemaInfo(): SchemaInfo {
   };
 }
 
-let _ajv: Ajv | null = null;
-let _validate: ((data: unknown) => boolean) | null = null;
-
 type Compiled = (data: unknown) => boolean;
 
-function getValidator(): { validate: Compiled; errors: ErrorObject[] | null } {
+let _ajv: Ajv | null = null;
+let _validate: Compiled | null = null;
+
+/** Lazily compile the local schema. AJV attaches `errors` to the compiled function on each call. */
+function getCompiled(): Compiled {
   if (!_validate) {
     const ajv = new Ajv({ allErrors: true, strict: false });
     addFormats(ajv);
@@ -48,10 +49,7 @@ function getValidator(): { validate: Compiled; errors: ErrorObject[] | null } {
     _validate = ajv.compile(schema) as Compiled;
     _ajv = ajv;
   }
-  return {
-    validate: (data: unknown) => _validate!(data),
-    errors: (_validate as Compiled & { errors?: ErrorObject[] }).errors ?? null,
-  };
+  return _validate;
 }
 
 export interface ValidationResult {
@@ -61,18 +59,22 @@ export interface ValidationResult {
 
 /** Validate a config against the LOCAL schema. Returns {valid, errors}. */
 export function validateConfig(config: unknown): ValidationResult {
-  const { validate, errors } = getValidator();
+  const validate = getCompiled();
   const valid = validate(config);
+  const errs = (validate as Compiled & { errors?: ErrorObject[] }).errors;
   return {
     valid,
-    errors: valid ? [] : (errors ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()),
+    errors: valid ? [] : (errs ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()),
   };
 }
 
 /** Throw a PlutusError(exit 2) when the config is invalid — the S5 regression surface. */
 export function assertValidConfig(config: unknown, what = "config"): void {
-  const { valid, errors } = validateConfig(config);
+  const validate = getCompiled();
+  const valid = validate(config);
   if (!valid) {
-    throw new PlutusError(`Validation failed for ${what}:\n  - ${errors.join("\n  - ")}`, EXIT.VALIDATION);
+    const errs = (validate as Compiled & { errors?: ErrorObject[] }).errors ?? [];
+    const detail = errs.map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()).join("\n  - ");
+    throw new PlutusError(`Validation failed for ${what}:\n  - ${detail}`, EXIT.VALIDATION);
   }
 }

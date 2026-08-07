@@ -7,7 +7,7 @@ import { loadInventory, capMap } from "./inventory.ts";
 import { loadAvailability } from "./availability.ts";
 import { solveChains } from "./solver.ts";
 import { loadTiers } from "./quality.ts";
-import { emitConfig } from "./emitter.ts";
+import { emitConfig, loadPinnedSlots } from "./emitter.ts";
 import { writeReport, ALL_UNTRUSTED_BANNER } from "./report.ts";
 import { schemaInfo } from "./validate.ts";
 import { PlutusError } from "./errors.ts";
@@ -42,7 +42,9 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   const chains = extractChains();
   const availability = loadAvailability(inventory);
   const tiers = loadTiers();
-  const solve = solveChains({ chains, availability, caps, tiers });
+  // W4.2: pinned slots from the sidecar are skipped by the solver and never touched by the merge.
+  const pinned = loadPinnedSlots();
+  const solve = solveChains({ chains, availability, caps, tiers, skipPinned: pinned });
   const allUntrusted = solve.allUntrusted;
 
   // P8: emit-shape decision note — printed once per run; agent fallback_models is schema-forced and
@@ -53,12 +55,16 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
 
   // Doctor soft-check (v1: soft — warn and report; schema validation is the primary gate).
   const assigned = new Set(solve.assignments.map((a) => a.slot));
-  const unresolved = chains.filter((c) => !assigned.has(c.name)).map((c) => c.name);
+  const unresolved = chains.filter((c) => !assigned.has(c.name) && !pinned.includes(c.name)).map((c) => c.name);
+  const pinnedSlots = chains.map((c) => c.name).filter((n) => pinned.includes(n));
   for (const slot of unresolved) {
     console.warn(`[doctor:soft] slot ${slot} has NO resolvable candidate — left unassigned (v1: warning only)`);
   }
+  if (pinnedSlots.length > 0) {
+    console.log(`[plutus] pinned (skipped): ${pinnedSlots.join(", ")}`);
+  }
 
-  const emit = emitConfig(solve.assignments, args.outputPath);
+  const emit = emitConfig(solve.assignments, args.outputPath, { merge: args.merge });
   const reportPath = writeReport(solve, dirname(args.outputPath), {
     schemaId: schemaInfo().id,
     chainSha,
