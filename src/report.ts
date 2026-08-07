@@ -14,7 +14,7 @@ export const V1_BOUNDARY_STATEMENT =
 export const ALL_UNTRUSTED_BANNER =
   "No provider has verified capacity. Assignments are quality-optimal only; budget constraints are NOT enforced.";
 
-export function renderReport(solve: SolveResult, inventoryNames: string[], opts: { schemaId?: string; chainSha?: string } = {}): string {
+export function renderReport(solve: SolveResult, inventoryNames: string[], opts: { schemaId?: string; chainSha?: string; omoVersion?: string } = {}): string {
   const lines: string[] = [];
   lines.push("# plutus-report", "");
   lines.push(`> ${V1_BOUNDARY_STATEMENT}`, "");
@@ -44,6 +44,11 @@ export function renderReport(solve: SolveResult, inventoryNames: string[], opts:
   lines.push("- Trust taxonomy: remote_api | local_estimation | user_declared");
   if (opts.chainSha) lines.push(`- Pinned chain SHA: ${opts.chainSha}`);
   if (opts.schemaId) lines.push(`- Schema $id: ${opts.schemaId}`);
+  if (opts.omoVersion) {
+    lines.push(`- Omo version probed for emit-shape (P8): v${opts.omoVersion}; installed must match or \`plutus optimize\` exits 3`);
+    lines.push("- Emit-shape (P8): agents emit `fallback_models` (schema-forced — no `models` key for agents); categories emit `models` (non-deprecated)");
+    lines.push("- P8 deprecation-warning record: omo v4.19.4 `config migrate --dry-run --json` emits NO deprecation warning for agent `fallback_models` (VERIFIED 2026-08-07)");
+  }
   lines.push("");
 
   return lines.join("\n");
@@ -53,7 +58,7 @@ export function renderReport(solve: SolveResult, inventoryNames: string[], opts:
 export function writeReport(
   solve: SolveResult,
   outputDir: string,
-  opts: { schemaId?: string; chainSha?: string; inventoryNames?: string[] } = {},
+  opts: { schemaId?: string; chainSha?: string; omoVersion?: string; inventoryNames?: string[] } = {},
 ): string {
   const path = join(outputDir, "plutus-report.md");
   writeFileSync(path, renderReport(solve, opts.inventoryNames ?? [], opts), "utf8");

@@ -1,9 +1,8 @@
-// optimize — the walking-skeleton orchestrator (W0.4 milestone: chain-parse stub → argmax →
-// emit-no-merge → report). W1 replaces the fixture chain source with runtime extraction from the
-// installed oh-my-openagent dist (pinned SHA). W4.2 adds the slot-level deep-merge.
-import { readFileSync } from "node:fs";
+// optimize — the walking-skeleton orchestrator. W1: real chain extraction from the installed
+// oh-my-openagent dist (pinned SHA) replaces the W0 fixture source; P8 startup version check wired.
+// W4.2 adds the slot-level deep-merge.
 import { dirname, join } from "node:path";
-import { loadFixtureChains } from "./chain.ts";
+import { extractChains, assertOmoVersion, installedOmoVersion, pinnedChainSha, PROBED_OMO_VERSION } from "./chain.ts";
 import { loadInventory, capMap, trustedSetEmpty } from "./inventory.ts";
 import { loadAvailability } from "./availability.ts";
 import { solveChains } from "./solver.ts";
@@ -21,11 +20,6 @@ export interface OptimizeArgs {
   merge: boolean;
 }
 
-/** W0 fixture chain source. W1 removes the env override and extracts from the installed package. */
-function chainsSourcePath(): string {
-  return process.env.OMO_PLUTUS_CHAINS_PATH ?? join(import.meta.dir, "..", "test", "fixtures", "chains.json");
-}
-
 export async function optimize(args: OptimizeArgs): Promise<void> {
   if (args.mode === "adaptive") {
     // W6.2 stub — honest refusal: adaptive rebalancing is v2, gated on A1-A3.
@@ -40,11 +34,20 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   const caps = capMap(inventory);
   const allUntrusted = trustedSetEmpty(inventory);
 
-  const rawChains = JSON.parse(readFileSync(chainsSourcePath(), "utf8")) as Parameters<typeof loadFixtureChains>[0];
-  const chains = loadFixtureChains(rawChains);
+  // P8 startup check: emit-shape decision was made against a probed omo version.
+  const installed = installedOmoVersion();
+  assertOmoVersion(installed);
+  const chainSha = pinnedChainSha();
 
+  const chains = extractChains();
   const availability = loadAvailability(inventory);
   const solve = solveChains(chains, availability, caps);
+
+  // P8: emit-shape decision note — printed once per run; agent fallback_models is schema-forced and
+  // config migrate (omo v4.19.4, VERIFIED 2026-08-07) emits NO deprecation warning for it.
+  console.log(
+    `[plutus] emit-shape: agents->fallback_models (schema-forced; omo v${PROBED_OMO_VERSION} config migrate accepts, no deprecation warning emitted)`,
+  );
 
   // Doctor soft-check (v1: soft — warn and report; schema validation is the primary gate).
   const assigned = new Set(solve.assignments.map((a) => a.slot));
@@ -56,7 +59,8 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   const emit = emitConfig(solve.assignments, args.outputPath);
   const reportPath = writeReport(solve, dirname(args.outputPath), {
     schemaId: schemaInfo().id,
-    chainSha: "(fixture-chains)",
+    chainSha,
+    omoVersion: installed,
     inventoryNames: Object.keys(inventory.providers),
   });
 

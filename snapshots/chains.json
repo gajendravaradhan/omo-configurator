@@ -1,0 +1,871 @@
+{
+  "generated": "2026-08-07T05:54:05.171Z",
+  "omo_version": "4.19.4",
+  "dist_path": "/code/omo-configurator/node_modules/oh-my-openagent/dist/index.js",
+  "pinned_sha": "e522d513a08d0a6871129dbf3d9c3a79e4871693997fbf34190c4d3fa3d6b4b5",
+  "slots": [
+    {
+      "kind": "agent",
+      "name": "sisyphus",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode",
+            "vercel",
+            "bailian-coding-plan",
+            "moonshotai-cn",
+            "firmware",
+            "ollama-cloud",
+            "aihubmix"
+          ],
+          "model": "kimi-k3"
+        },
+        {
+          "providers": [
+            "openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "providers": [
+            "zai-coding-plan",
+            "opencode",
+            "bailian-coding-plan",
+            "vercel"
+          ],
+          "model": "glm-5.2"
+        },
+        {
+          "providers": [
+            "opencode"
+          ],
+          "model": "big-pickle"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "hephaestus",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "github-copilot",
+            "vercel",
+            "opencode"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "oracle",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "xhigh"
+        },
+        {
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "google",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gemini-3.1-pro",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "glm-5.2"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "librarian",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai"
+          ],
+          "model": "gpt-5.6-luna-fast",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "deepseek"
+          ],
+          "model": "deepseek-v4-flash",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "bailian-coding-plan"
+          ],
+          "model": "qwen3.7-plus"
+        },
+        {
+          "providers": [
+            "vercel"
+          ],
+          "model": "minimax-m2.7-highspeed"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m3"
+        },
+        {
+          "providers": [
+            "minimax-coding-plan",
+            "minimax-cn-coding-plan"
+          ],
+          "model": "MiniMax-M3"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m2.7"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "vercel"
+          ],
+          "model": "claude-haiku-4-5"
+        },
+        {
+          "providers": [
+            "openai",
+            "vercel"
+          ],
+          "model": "gpt-5.4-nano"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "explore",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai"
+          ],
+          "model": "gpt-5.6-luna-fast",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "deepseek"
+          ],
+          "model": "deepseek-v4-flash",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "bailian-coding-plan"
+          ],
+          "model": "qwen3.7-plus"
+        },
+        {
+          "providers": [
+            "vercel"
+          ],
+          "model": "minimax-m2.7-highspeed"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m3"
+        },
+        {
+          "providers": [
+            "minimax-coding-plan",
+            "minimax-cn-coding-plan"
+          ],
+          "model": "MiniMax-M3"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m2.7"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "vercel"
+          ],
+          "model": "claude-haiku-4-5"
+        },
+        {
+          "providers": [
+            "openai",
+            "vercel"
+          ],
+          "model": "gpt-5.4-nano"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "multimodal-looker",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "kimi-k3"
+        },
+        {
+          "providers": [
+            "zai-coding-plan",
+            "vercel"
+          ],
+          "model": "glm-4.6v"
+        },
+        {
+          "providers": [
+            "openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5-nano"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "prometheus",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-fable-5",
+          "variant": "xhigh"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode",
+            "vercel"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "metis",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode",
+            "vercel"
+          ],
+          "model": "kimi-k3",
+          "variant": "low"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "momus",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "vercel"
+          ],
+          "model": "gpt-5.6-terra",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-5.6-terra",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "openai",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "xhigh"
+        },
+        {
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "google",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gemini-3.1-pro",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "glm-5.2"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "atlas",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-sonnet-5"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "kimi-k3"
+        },
+        {
+          "providers": [
+            "openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m3"
+        },
+        {
+          "providers": [
+            "minimax-coding-plan",
+            "minimax-cn-coding-plan"
+          ],
+          "model": "MiniMax-M3"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m2.7"
+        }
+      ]
+    },
+    {
+      "kind": "agent",
+      "name": "sisyphus-junior",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-sonnet-5"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "kimi-k3"
+        },
+        {
+          "providers": [
+            "openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m3"
+        },
+        {
+          "providers": [
+            "minimax-coding-plan",
+            "minimax-cn-coding-plan"
+          ],
+          "model": "MiniMax-M3"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m2.7"
+        },
+        {
+          "providers": [
+            "opencode"
+          ],
+          "model": "big-pickle"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "visual-engineering",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode",
+            "vercel"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "zai-coding-plan",
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "glm-5.2",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "openai",
+            "quotio-openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "ultrabrain",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "quotio-openai",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "github-copilot"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "openai",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "deep",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "quotio-openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "medium"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "artistry",
+      "fallbackChain": [
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-fable-5",
+          "variant": "xhigh"
+        },
+        {
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode",
+            "vercel"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "xhigh"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "quick",
+      "fallbackChain": [
+        {
+          "providers": [
+            "kimi-for-coding"
+          ],
+          "model": "kimi-for-coding-highspeed"
+        },
+        {
+          "providers": [
+            "quotio-openai"
+          ],
+          "model": "gpt-5.6-luna-fast",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "deepseek"
+          ],
+          "model": "deepseek-v4-flash",
+          "variant": "off"
+        },
+        {
+          "providers": [
+            "qwen-token-plan",
+            "alibaba-token-plan",
+            "bailian-coding-plan",
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "qwen3.6-flash",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m3",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "minimax-m2.7",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "xai"
+          ],
+          "model": "grok-4.20-0309-non-reasoning"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "vercel"
+          ],
+          "model": "claude-haiku-4-5",
+          "variant": "off"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "unspecified-low",
+      "fallbackChain": [
+        {
+          "providers": [
+            "openai",
+            "quotio-openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-terra",
+          "variant": "high"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-sonnet-5",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "qwen-token-plan",
+            "alibaba-token-plan",
+            "qwen-token-plan-cn",
+            "alibaba-token-plan-cn"
+          ],
+          "model": "qwen3.8-max-preview",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "deepseek",
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "deepseek-v4-pro",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "xiaomi",
+            "opencode-go",
+            "vercel"
+          ],
+          "model": "mimo-v2.5-pro",
+          "variant": "max"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "unspecified-high",
+      "fallbackChain": [
+        {
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode",
+            "vercel"
+          ],
+          "model": "kimi-k3",
+          "variant": "max"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "xhigh"
+        },
+        {
+          "providers": [
+            "openai",
+            "quotio-openai",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gpt-5.6-sol",
+          "variant": "high"
+        }
+      ]
+    },
+    {
+      "kind": "category",
+      "name": "writing",
+      "fallbackChain": [
+        {
+          "providers": [
+            "kimi-for-coding",
+            "moonshotai",
+            "opencode-go",
+            "opencode",
+            "vercel"
+          ],
+          "model": "kimi-k3",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "anthropic",
+            "anthropic-api",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "claude-opus-5",
+          "variant": "low"
+        },
+        {
+          "providers": [
+            "google",
+            "github-copilot",
+            "opencode",
+            "vercel"
+          ],
+          "model": "gemini-3.6-flash"
+        }
+      ]
+    }
+  ]
+}
