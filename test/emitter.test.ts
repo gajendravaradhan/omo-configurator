@@ -221,3 +221,23 @@ test("omo.jsonc: emitOmoConfig writes the wrapped doc + backup, and the [opencod
   const backup = JSON.parse(readFileSync(backupPath!, "utf8"));
   expect(backup["[opencode]"].agents.build.model).toBe("old");
 });
+
+import { readOmoConfig, parseJsonc } from "../src/emitter.ts";
+
+test("omo.jsonc: parseJsonc strips // and /* */ comments without mangling URLs inside strings", () => {
+  const raw = '{\n  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",\n  // comment\n  "url": "https://example.com/path?q=1//2",\n  /* block */ "n": 1\n}\n';
+  const doc = parseJsonc(raw) as Record<string, unknown>;
+  expect(doc.$schema).toContain("https://");
+  expect(doc.url).toBe("https://example.com/path?q=1//2"); // // inside string survives
+  expect(doc.n).toBe(1);
+});
+
+test("omo.jsonc: readOmoConfig parses the commented live-style fixture (mirrors NAS config)", () => {
+  const path = join(import.meta.dir, "fixtures", "omo-jsonc-fixture.jsonc");
+  const doc = readOmoConfig(path)!;
+  expect(doc.$schema).toContain("omo.schema.json");
+  expect((doc.codegraph as any).telemetry).toBe(true);
+  const oc = doc["[opencode]"] as Record<string, unknown>;
+  expect((oc.agents as any).build.model).toBe("openai/gpt-5.6-sol");
+  expect((oc.team_mode as any).enabled).toBe(true);
+});

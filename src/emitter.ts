@@ -19,7 +19,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Assignment } from "./types.ts";
-import { assertValidConfig } from "./validate.ts";
+import { assertValidConfig, validateOpencodeOwned } from "./validate.ts";
 import { pinnedSidecarPath } from "./config.ts";
 import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
@@ -151,6 +151,45 @@ export function emitConfig(assignments: Assignment[], outputPath: string, opts: 
 /** Preserved top-level keys that must survive a merge into an existing omo.jsonc document. */
 const OMO_TOP_LEVEL_KEEP = new Set(["codegraph", "[senpi]", "[codex]", "teams", "profiles", "models", "task", "legacy_migrations", "_migrations"]);
 
+/** Parse a JSONC document (strips // and /* *\/ comments, string-aware so URLs like https:// survive). */
+export function parseJsonc(raw: string): unknown {
+  let out = "";
+  let inString: "'" | '"' | null = null;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i]!;
+    const next = raw[i + 1];
+    if (inLineComment) {
+      if (c === "\n") { inLineComment = false; out += c; }
+      continue;
+    }
+    if (inBlockComment) {
+      if (c === "*" && next === "/") { inBlockComment = false; i++; }
+      continue;
+    }
+    if (inString) {
+      out += c;
+      if (escaped) { escaped = false; continue; }
+      if (c === "\\") { escaped = true; continue; }
+      if (c === inString) inString = null;
+      continue;
+    }
+    if (c === '"' || c === "'") { inString = c; out += c; continue; }
+    if (c === "/" && next === "/") { inLineComment = true; i++; continue; }
+    if (c === "/" && next === "*") { inBlockComment = true; i++; continue; }
+    out += c;
+  }
+  return JSON.parse(out);
+}
+
+/** Read an existing omo.jsonc (JSONC-tolerant) into a plain object. */
+export function readOmoConfig(path: string): Record<string, unknown> | undefined {
+  if (!existsSync(path)) return undefined;
+  return parseJsonc(readFileSync(path, "utf8")) as Record<string, unknown>;
+}
+
 /** Build the full omo.jsonc document: { $schema, [opencode]: flatDoc, ...preserved }.
  *  `existing` is the previous omo.jsonc document (wrapper + user keys). When absent, a fresh
  *  [opencode] section is built from scratch. */
@@ -180,10 +219,10 @@ export function emitOmoConfig(assignments: Assignment[], outputPath: string, opt
   let existing: Record<string, unknown> | undefined;
   if (merge && existsSync(outputPath)) {
     try {
-      existing = JSON.parse(readFileSync(outputPath, "utf8")) as Record<string, unknown>;
+      existing = readOmoConfig(outputPath);
     } catch (e: unknown) {
       throw new PlutusError(
-        `cannot merge into ${outputPath}: existing config is not valid JSON (${(e as Error).message}). ` +
+        `cannot merge into ${outputPath}: existing config is not valid JSONC (${(e as Error).message}). ` +
           `Fix or remove it, or pass --no-merge to emit fresh.`,
         EXIT.RUNTIME,
       );
@@ -191,8 +230,18 @@ export function emitOmoConfig(assignments: Assignment[], outputPath: string, opt
   }
 
   const container = buildOmoConfig(assignments, existing);
-  // PRIMARY gate: the [opencode] section must pass the local oh-my-opencode schema (S5).
-  assertValidConfig(container["[opencode]"], "omo.jsonc [opencode] section");
+  // PRIMARY gate (S5): validate the OPTIMIZER-OWNED surface only — the agents/categories entries
+  // Plutus replaced. Pre-existing user content (team_mode, ultrawork, etc.) is out of the gate:
+  // OMO's runtime loader tolerates schema-loose content, and the gate must not reject the user's
+  // own working config (verified 2026-08-07: live NAS omo.jsonc fails full-schema validation but
+  // loads fine). See validateOpencodeOwned.
+  const inner = container["[opencode]"] as Record<string, unknown>;
+  const ownedAgents = assignments.filter((a) => a.kind === "agent").map((a) => a.slot);
+  const ownedCategories = assignments.filter((a) => a.kind === "category").map((a) => a.slot);
+  const ownedErrors = validateOpencodeOwned(inner, ownedAgents, ownedCategories);
+  if (ownedErrors.length > 0) {
+    throw new PlutusError(`Validation failed for optimizer-owned [opencode] slots:\n  - ${ownedErrors.join("\n  - ")}`, EXIT.VALIDATION);
+  }
 
   let backupPath: string | null = null;
   if (existsSync(outputPath)) {

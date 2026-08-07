@@ -1,0 +1,17 @@
+// OMO configuration — test fixture (JSONC with comments + URLs, mirrors the live NAS config)
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",
+  // preserved top-level key (codegraph)
+  "codegraph": { "telemetry": true },
+  "[opencode]": {
+    // agents section
+    "agents": {
+      "build": {
+        "model": "openai/gpt-5.6-sol", // comment after value
+        "reasoning": "high"
+      }
+    },
+    "categories": {},
+    "team_mode": { "enabled": true } /* block comment */
+  }
+}

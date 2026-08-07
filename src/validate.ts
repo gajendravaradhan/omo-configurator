@@ -78,3 +78,37 @@ export function assertValidConfig(config: unknown, what = "config"): void {
     throw new PlutusError(`Validation failed for ${what}:\n  - ${detail}`, EXIT.VALIDATION);
   }
 }
+
+/**
+ * Validate ONLY the optimizer-owned surface of an omo.jsonc [opencode] section: the agents and
+ * categories entries Plutus replaced. Pre-existing user content (team_mode, ultrawork, etc.) is
+ * deliberately OUT of the gate — OMO's runtime loader tolerates schema-loose content (verified:
+ * the live NAS config fails full-schema validation yet loads fine), and S5's contract is "never
+ * write invalid OPTIMIZER output", not "reject the user's own tolerated config".
+ * Returns the errors for the optimizer-owned slots (empty = gate passes).
+ */
+export function validateOpencodeOwned(
+  section: Record<string, unknown>,
+  ownedAgents: string[],
+  ownedCategories: string[],
+): string[] {
+  const validate = getCompiled();
+  const probe: Record<string, unknown> = {
+    // buildConfig guarantees git_master exists in the real section; the probe needs it too
+    // because the oh-my-opencode schema REQUIRES it at the [opencode] top level.
+    git_master: { commit_footer: true, include_co_authored_by: true, git_env_prefix: "GIT_MASTER=1" },
+  };
+  if (ownedAgents.length > 0) {
+    const agents = (section.agents ?? {}) as Record<string, unknown>;
+    probe.agents = Object.fromEntries(ownedAgents.filter((a) => a in agents).map((a) => [a, agents[a]]));
+  }
+  if (ownedCategories.length > 0) {
+    const categories = (section.categories ?? {}) as Record<string, unknown>;
+    probe.categories = Object.fromEntries(ownedCategories.filter((c) => c in categories).map((c) => [c, categories[c]]));
+  }
+  const valid = validate(probe);
+  if (valid) return [];
+  return ((validate as Compiled & { errors?: ErrorObject[] }).errors ?? []).map(
+    (e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim(),
+  );
+}
