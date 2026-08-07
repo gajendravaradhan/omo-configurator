@@ -13,7 +13,7 @@ import { loadAvailability } from "../src/availability.ts";
 import { solveChains } from "../src/solver.ts";
 import { loadTiers } from "../src/quality.ts";
 import { extractChains, pinnedChainSha, installedOmoVersion, assertOmoVersion } from "../src/chain.ts";
-import { emitConfig, loadPinnedSlots } from "../src/emitter.ts";
+import { emitOmoConfig, loadPinnedSlots } from "../src/emitter.ts";
 import { renderReport } from "../src/report.ts";
 import { readTokenHistory } from "../src/tokens-history.ts";
 import { appendLedger, buildLedgerEntry } from "../src/ledger.ts";
@@ -246,13 +246,25 @@ const server = serve({
           const dbPath = str(body["db-path"], resolveOpencodeDbPath());
           const merge = body.merge !== false;
           const mode = str(body.mode, "absolute-best");
+          const action = str(body.action, "update"); // "update" | "download"
           if (mode === "adaptive") throw new PlutusError("adaptive mode is not available in v1 (A1-A3 open)", EXIT.SPIKE);
           const b = await runSolve({ inventoryPath, dbPath, merge, outputPath, mode });
-          const emit = emitConfig(b.solve.assignments, outputPath, { merge });
-          const trustLevels = Object.fromEntries(Object.entries(loadInventory(inventoryPath).providers).map(([pid, p]) => [pid, p.trust]));
-          appendLedger(buildLedgerEntry(b.solve, capMap(loadInventory(inventoryPath)), trustLevels, b.chainSha, mode));
+
+          // Build the omo.jsonc document (wrapper + validated inner [opencode]) for BOTH actions;
+          // "download" returns it without writing, "update" emits it atomically to the config path.
+          const inventory = loadInventory(inventoryPath);
+          const trustLevels = Object.fromEntries(Object.entries(inventory.providers).map(([pid, p]) => [pid, p.trust]));
+          let emit: { configPath: string; backupPath: string | null } | null = null;
+          let document: Record<string, unknown> | null = null;
+          if (action === "download") {
+            const { buildOmoConfig } = await import("../src/emitter.ts");
+            document = buildOmoConfig(b.solve.assignments);
+          } else {
+            emit = emitOmoConfig(b.solve.assignments, outputPath, { merge });
+            appendLedger(buildLedgerEntry(b.solve, capMap(inventory), trustLevels, b.chainSha, mode));
+          }
           const report = renderReport(b.solve, b.inventoryNames, bundleReportData(b, mode, { trustLevels }));
-          return { solve: { assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted, skippedPinned: b.solve.skippedPinned }, emit, report, doctor: b.doctor, tokenHistory: b.tokenHistory };
+          return { solve: { assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted, skippedPinned: b.solve.skippedPinned }, emit, document, report, doctor: b.doctor, tokenHistory: b.tokenHistory };
         }));
       }
 

@@ -166,3 +166,58 @@ test("W4.2: loadPinnedSlots reads the sidecar; missing sidecar → empty list", 
   expect(loadPinnedSlots(join(dir, "pinned.json"))).toEqual(["oracle", "sisyphus"]);
   expect(loadPinnedSlots(join(dir, "missing.json"))).toEqual([]);
 });
+
+// ---- omo.jsonc emit path (the LIVE config OMO 4.19.4 reads: ~/.omo/omo.jsonc) ----
+
+import { buildOmoConfig, emitOmoConfig, OMO_SCHEMA_URL } from "../src/emitter.ts";
+
+test("omo.jsonc: buildOmoConfig wraps assignments in { $schema, [opencode] } and preserves top-level keys", () => {
+  const assignments = [
+    {
+      slot: "oracle",
+      kind: "agent" as const,
+      primary: { model: "gpt-5.6-sol", provider: "openai", fit: 1.0, capability: 1.0, quality: 1.0, projectedCost: 0, quotaHeadroom: 0.8, trusted: true, entry: { providers: ["openai"], model: "gpt-5.6-sol", position: 0 } },
+      fallbacks: [],
+      rationale: "head fit",
+    },
+  ];
+  const existing = {
+    $schema: OMO_SCHEMA_URL,
+    "[opencode]": { agents: { build: { model: "x" } }, categories: {} },
+    codegraph: { telemetry: true },
+    team_mode_should_not_survive: true, // not in OMO_TOP_LEVEL_KEEP
+  };
+  const doc = buildOmoConfig(assignments, existing);
+  expect(doc.$schema).toBe(OMO_SCHEMA_URL);
+  expect((doc as any).codegraph).toEqual({ telemetry: true }); // preserved
+  expect((doc as any).team_mode_should_not_survive).toBeUndefined(); // dropped
+  const inner = (doc as any)["[opencode]"];
+  expect(inner.agents.oracle.model).toBe("gpt-5.6-sol");
+  expect(inner.agents.build.model).toBe("x"); // user key preserved via buildConfig merge
+  expect((doc as any)["[opencode]"].categories).toBeDefined();
+});
+
+test("omo.jsonc: emitOmoConfig writes the wrapped doc + backup, and the [opencode] section passes the local schema", () => {
+  const dir = mkdtempSync(join(tmpdir(), "plutus-omo-"));
+  const target = join(dir, "omo.jsonc");
+  const assignments = [
+    {
+      slot: "oracle",
+      kind: "agent" as const,
+      primary: { model: "gpt-5.6-sol", provider: "openai", fit: 1.0, capability: 1.0, quality: 1.0, projectedCost: 0, quotaHeadroom: 0.8, trusted: true, entry: { providers: ["openai"], model: "gpt-5.6-sol", position: 0 } },
+      fallbacks: [],
+      rationale: "head",
+    },
+  ];
+  writeFileSync(target, JSON.stringify({ $schema: OMO_SCHEMA_URL, "[opencode]": { agents: { build: { model: "old" } }, categories: {} } }));
+  const { backupPath, configPath } = emitOmoConfig(assignments, target, { merge: true });
+  expect(configPath).toBe(target);
+  expect(backupPath).toContain(".bak.");
+  const written = JSON.parse(readFileSync(target, "utf8"));
+  expect(written.$schema).toBe(OMO_SCHEMA_URL);
+  expect(written["[opencode]"].agents.oracle.model).toBe("gpt-5.6-sol");
+  expect(written["[opencode]"].agents.build.model).toBe("old"); // merged, preserved
+  // backup contains the pre-merge doc
+  const backup = JSON.parse(readFileSync(backupPath!, "utf8"));
+  expect(backup["[opencode]"].agents.build.model).toBe("old");
+});

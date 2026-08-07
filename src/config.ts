@@ -39,10 +39,16 @@ export function resolveInventoryPath(cliFlag?: string): string {
   return defaultInventoryPath();
 }
 
-/** Resolve the opencode config target. Priority: --output flag > ~/.config/opencode/opencode.json. */
+/** Resolve the omo config target. Priority: --output flag > ~/.omo/omo.jsonc.
+ *  OMO 4.19.4 reads ~/.omo/omo.jsonc (resolveUserOmoConfigPath in the plugin);
+ *  the legacy oh-my-opencode.json path is no longer loaded (renamed .legacy). */
 export function resolveOmoConfigPath(cliFlag?: string): string {
   if (cliFlag) return cliFlag;
-  // oh-my-opencode.json lives next to the user's opencode config.
+  return join(homedir(), ".omo", "omo.jsonc");
+}
+
+/** Legacy emit target kept for explicit use only (--output override) — OMO 4.19.4 does NOT load it. */
+export function legacyOmoConfigPath(): string {
   return join(homedir(), ".config", "opencode", "oh-my-opencode.json");
 }
 

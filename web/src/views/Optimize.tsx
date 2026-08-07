@@ -6,7 +6,8 @@ import { Badge, CodeBlock, DataTable, MonoChip, Panel, PanelStates, RunButton, T
 
 interface OptimizeResult {
   solve: { assignments: SolvePreview["assignments"]; allUntrusted: boolean; skippedPinned: string[] };
-  emit: { configPath: string; backupPath: string | null };
+  emit: { configPath: string; backupPath: string | null } | null;
+  document: Record<string, unknown> | null;
   report: string;
   doctor: { ran: boolean; notes: string[] };
   tokenHistory: { available: boolean; rows: unknown[]; dbPath: string };
@@ -17,7 +18,7 @@ export function OptimizeView() {
   const [merge, setMerge] = useState(true);
   const [dbPath, setDbPath] = useState("");
   const [emitMode, setEmitMode] = useState<"preview" | "emit">("preview");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"update" | "download" | null>(null);
   const [result, setResult] = useState<OptimizeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
@@ -28,22 +29,34 @@ export function OptimizeView() {
     [merge, dbPath, emitMode],
   );
 
-  async function runEmit() {
-    setBusy(true); setError(null);
+  async function run(action: "update" | "download") {
+    setBusy(action); setError(null);
     try {
-      const res = await api.post<OptimizeResult>("/api/optimize", { merge, "db-path": dbPath || undefined, mode: "absolute-best" });
+      const res = await api.post<OptimizeResult>("/api/optimize", { merge, "db-path": dbPath || undefined, mode: "absolute-best", action });
       setResult(res);
-      toast("success", `Emitted ${res.emit.configPath}`);
+      if (action === "update") {
+        toast("success", `Updated ${res.emit?.configPath ?? "omo.jsonc"}`);
+      } else {
+        // Real browser download of the generated omo.jsonc document.
+        const blob = new Blob([JSON.stringify(res.document, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "omo.jsonc";
+        a.click();
+        URL.revokeObjectURL(url);
+        toast("success", "omo.jsonc downloaded");
+      }
     } catch (e) {
       const msg = (e as Error).message;
       setError(msg);
       toast("error", msg);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  const shown = result ?? (preview.data ? { solve: preview.data, report: preview.data.report, doctor: { ran: false, notes: [] }, tokenHistory: { available: false, rows: [], dbPath: "" }, emit: { configPath: "", backupPath: null } } : null);
+  const shown = result ?? (preview.data ? { solve: preview.data, report: preview.data.report, doctor: { ran: false, notes: [] }, tokenHistory: { available: false, rows: [], dbPath: "" }, emit: null, document: null } : null);
 
   return (
     <>
@@ -61,7 +74,8 @@ export function OptimizeView() {
             <input className="text-input" placeholder="default: ~/.local/share/opencode/opencode.db" value={dbPath} onChange={(e) => setDbPath(e.target.value)} />
           </label>
           <RunButton variant="ghost" running={emitMode === "preview"} onClick={() => { setEmitMode("preview"); preview.reload(); }}>Preview solve</RunButton>
-          <RunButton running={busy} runningLabel="Optimizing…" onClick={runEmit}><span className="row" style={{ gap: 6 }}>Optimize + emit</span></RunButton>
+          <RunButton running={busy === "update"} runningLabel="Optimizing…" onClick={() => run("update")}>Optimize &amp; Update</RunButton>
+          <RunButton variant="ghost" running={busy === "download"} runningLabel="Preparing…" onClick={() => run("download")}>Optimize &amp; Download</RunButton>
         </div>
         {error && <div className="error-state" style={{ marginTop: 12 }}>{error}</div>}
       </Panel>
@@ -78,7 +92,7 @@ export function OptimizeView() {
           ) : undefined
         }
       >
-        <PanelStates loading={preview.loading || busy} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown} emptyText="Run a preview or optimize to see assignments">
+        <PanelStates loading={preview.loading || busy !== null} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown} emptyText="Run a preview or optimize to see assignments">
           {shown && (
             <DataTable headers={["slot", "kind", "primary model", "provider", "fit", "capability", "quality", "trusted", "binding"]}>
               {shown.solve.assignments.map((a) => (
@@ -101,11 +115,17 @@ export function OptimizeView() {
 
       {shown && (
         <>
-          <Panel title="Emitted config" overline="output" actions={<button className="run-btn ghost" onClick={() => setShowReport(!showReport)}>{showReport ? "Show report" : "Show report"}</button>}>
-            <CodeBlock maxHeight={320}>{JSON.stringify(shown.emit?.configPath ? { emitted: shown.emit.configPath, backup: shown.emit.backupPath } : { preview: true, note: "Run Optimize + emit to write the config" }, null, 2)}</CodeBlock>
+          <Panel title="Emitted omo.jsonc" overline="output" actions={<button className="run-btn ghost" onClick={() => setShowReport(!showReport)}>{showReport ? "Show assignments" : "Show report"}</button>}>
+            {shown.document ? (
+              <CodeBlock maxHeight={320}>{JSON.stringify(shown.document, null, 2)}</CodeBlock>
+            ) : shown.emit?.configPath ? (
+              <CodeBlock maxHeight={320}>{JSON.stringify({ updated: shown.emit.configPath, backup: shown.emit.backupPath }, null, 2)}</CodeBlock>
+            ) : (
+              <CodeBlock maxHeight={320}>{JSON.stringify({ preview: true, note: "Run Optimize & Update (writes ~/.omo/omo.jsonc) or Optimize & Download (saves the file)" }, null, 2)}</CodeBlock>
+            )}
             {shown.emit?.configPath && (
               <div className="row" style={{ marginTop: 12 }}>
-                <Badge variant="success">written</Badge>
+                <Badge variant="success">updated</Badge>
                 <MonoChip text={shown.emit.configPath} />
                 {shown.emit.backupPath && <span className="body-sm text-tertiary">backup: {shown.emit.backupPath}</span>}
               </div>

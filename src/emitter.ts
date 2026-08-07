@@ -27,6 +27,9 @@ import { EXIT } from "./types.ts";
 /** W4.4 — maximum fallback entries emitted per slot. */
 export const FALLBACK_CAP = 5;
 
+/** omo.jsonc container-schema URL (the $schema the plugin's config loader recognizes). */
+export const OMO_SCHEMA_URL = "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json";
+
 /** Optimizer-owned keys — the ONLY keys the merge replaces (bundle §1.8). */
 const OWNED_KEYS = new Set(["model", "variant", "reasoning", "reasoningEffort", "models", "fallback_models"]);
 
@@ -133,6 +136,72 @@ export function emitConfig(assignments: Assignment[], outputPath: string, opts: 
 
   const tmp = `${outputPath}.tmp.${process.pid}`;
   writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", "utf8");
+  renameSync(tmp, outputPath);
+
+  return { configPath: outputPath, backupPath };
+}
+
+// ---- omo.jsonc emit path (the LIVE config OMO 4.19.4 reads: ~/.omo/omo.jsonc) ----
+// The container document is { $schema: omo.schema.url, [opencode]: { agents, categories, ... }, ...otherTopLevel }.
+// The [opencode] section uses the SAME oh-my-opencode schema the flat emitter validates against
+// (verified: omo.schema.json's [opencode] property $id IS oh-my-opencode.schema.json), so the inner
+// document is validated with the existing local-schema gate; the wrapper + preserved top-level keys
+// are structural. JSONC output: JSON.stringify is valid JSONC (jsonc is a superset).
+
+/** Preserved top-level keys that must survive a merge into an existing omo.jsonc document. */
+const OMO_TOP_LEVEL_KEEP = new Set(["codegraph", "[senpi]", "[codex]", "teams", "profiles", "models", "task", "legacy_migrations", "_migrations"]);
+
+/** Build the full omo.jsonc document: { $schema, [opencode]: flatDoc, ...preserved }.
+ *  `existing` is the previous omo.jsonc document (wrapper + user keys). When absent, a fresh
+ *  [opencode] section is built from scratch. */
+export function buildOmoConfig(assignments: Assignment[], existing?: Record<string, unknown>): Record<string, unknown> {
+  const container: Record<string, unknown> = {};
+  if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+    for (const [k, v] of Object.entries(existing)) {
+      if (k === "$schema") continue; // we set the authoritative schema URL
+      if (k === "[opencode]") continue; // replaced below
+      if (OMO_TOP_LEVEL_KEEP.has(k)) container[k] = v;
+    }
+  }
+  container.$schema = OMO_SCHEMA_URL;
+
+  const prevOpencode = existing?.["[opencode]"] as Record<string, unknown> | undefined;
+  const inner = buildConfig(assignments, prevOpencode);
+  container["[opencode]"] = inner;
+  return container;
+}
+
+/** Emit the omo.jsonc document atomically (validate inner [opencode] against the local schema FIRST,
+ *  back up the existing target, tmp+rename). Returns { configPath, backupPath }. */
+export function emitOmoConfig(assignments: Assignment[], outputPath: string, opts: EmitOptions = {}): EmitResult {
+  const merge = opts.merge ?? true;
+  mkdirSync(dirname(outputPath), { recursive: true });
+
+  let existing: Record<string, unknown> | undefined;
+  if (merge && existsSync(outputPath)) {
+    try {
+      existing = JSON.parse(readFileSync(outputPath, "utf8")) as Record<string, unknown>;
+    } catch (e: unknown) {
+      throw new PlutusError(
+        `cannot merge into ${outputPath}: existing config is not valid JSON (${(e as Error).message}). ` +
+          `Fix or remove it, or pass --no-merge to emit fresh.`,
+        EXIT.RUNTIME,
+      );
+    }
+  }
+
+  const container = buildOmoConfig(assignments, existing);
+  // PRIMARY gate: the [opencode] section must pass the local oh-my-opencode schema (S5).
+  assertValidConfig(container["[opencode]"], "omo.jsonc [opencode] section");
+
+  let backupPath: string | null = null;
+  if (existsSync(outputPath)) {
+    backupPath = `${outputPath}.bak.${ts()}`;
+    copyFileSync(outputPath, backupPath);
+  }
+
+  const tmp = `${outputPath}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(container, null, 2) + "\n", "utf8");
   renameSync(tmp, outputPath);
 
   return { configPath: outputPath, backupPath };

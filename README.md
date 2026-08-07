@@ -5,7 +5,8 @@
 `omo-plutus` reads your live subscription quota (via `plutus discover`), joins it against
 oh-my-openagent's legal model-fallback chains and live model availability, solves a
 per-slot assignment (which model should run each agent/category slot), and emits a
-**schema-validated `oh-my-opencode.json`** plus an **auditable `plutus-report.md`**.
+**schema-validated `omo.jsonc`** (the live config OMO 4.19.4 reads, `~/.omo/omo.jsonc`)
+plus an **auditable `plutus-report.md`**.
 
 > **v1 does not enforce budget.** It emits quality-optimal legal assignments and reports
 > projected consumption. Live budget coupling, shadow prices, and adaptive rebalancing
@@ -95,7 +96,7 @@ bun run src/cli/index.ts discover --write
 bun run src/cli/index.ts optimize
 
 # 5. Audit the result
-cat ~/.config/opencode/oh-my-opencode.json   # emitted config (deep-merged)
+cat ~/.omo/omo.jsonc   # emitted config (deep-merged; the live OMO 4.19.4 config)
 cat ~/.config/opencode/plutus-report.md      # why each slot got its model
 ```
 
@@ -156,7 +157,7 @@ Point a browser at `http://localhost:4040` — the server serves the built app a
 | View | Endpoint(s) | Plutus capability |
 |---|---|---|
 | **Dashboard** | `GET /api/status` | omo version + P8 gate, chain SHA, drift, inventory/db presence, schema `$id` |
-| **Optimize** | `GET /api/solve/preview`, `POST /api/optimize` | live solve preview (pure read, no emit) + full emit (deep-merge toggle, ledger append, backup) |
+| **Optimize** | `GET /api/solve/preview`, `POST /api/optimize` | live solve preview (pure read, no emit) + **two actions**: `Optimize & Update` (writes `omo.jsonc` atomically to `~/.omo/omo.jsonc` with backup — the next OMO session picks it up) and `Optimize & Download` (returns the generated `omo.jsonc` as a browser download, nothing written) |
 | **Discover** | `POST /api/discover/run` | quota output mapping — raw preserved, never silently degraded |
 | **Chains** | `GET /api/chains` | the 19-slot fallback-chain inventory (live acorn extraction) |
 | **Token History** | `GET /api/token-history` | per agent × model consumption from opencode.db (read-only, SPIKE-02) |
@@ -190,14 +191,17 @@ inline SVG icons only.
 
 ### `plutus optimize`
 
-Solve every slot and emit `oh-my-opencode.json` + `plutus-report.md`.
+Solve every slot and emit `omo.jsonc` (the live OMO config) + `plutus-report.md`.
+The emit target is `~/.omo/omo.jsonc` — the path OMO 4.19.4 actually reads
+(`resolveUserOmoConfigPath`). The legacy `oh-my-opencode.json` is no longer loaded by
+the plugin; override the target explicitly with `--output` only if you need a different file.
 
 ```bash
 plutus optimize [OPTIONS]
 
   -c, --config PATH   Path to inventory.yaml
       --mode MODE     Solve mode (v1: absolute-best; adaptive is a refusing stub)
-      --output PATH   oh-my-opencode.json target (default ~/.config/opencode/oh-my-opencode.json)
+      --output PATH   omo.jsonc target (default ~/.omo/omo.jsonc — the live OMO 4.19.4 config)
       --db-path PATH  Override opencode.db path (read-only, per-agent token history)
       --no-merge      Do not deep-merge into existing config (emit fresh)
 ```
