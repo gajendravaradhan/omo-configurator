@@ -1,0 +1,44 @@
+# omo-plutus inventory.yaml — authoritative JSON Schema (YAML form).
+# W3.2 deliverable. The inline loader (src/inventory.ts) is the runtime gate; this schema is the
+# canonical shape contract and is exercised by test/inventory.test.ts (W3.2).
+#
+# Bundle §4: trust taxonomy = {remote_api, local_estimation, user_declared}.
+# Bundle §7 deletions: reserve_policy / promo / subscription_flat / anthropic_flat are FORBIDDEN
+# at the document top level AND inside every provider block (additionalProperties: false here and
+# an explicit loader check — the deletions hold at every nesting level).
+# cap: remaining subscription quota 0..1, or null = uncapped (metered/overflow-only). σ NEVER applies
+# to null (S3). There are no hardcoded limits, no reserve policy, no promo keys.
+$schema: http://json-schema.org/draft-07/schema#
+$id: https://omo-plutus.dev/schemas/inventory.schema.json
+title: omo-plutus inventory
+type: object
+required: [version, providers]
+additionalProperties: false
+properties:
+  version:
+    type: integer
+    minimum: 1
+  providers:
+    type: object
+    additionalProperties:
+      type: object
+      required: [trust]
+      additionalProperties: false
+      properties:
+        cap:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 1
+            - type: "null"
+        window_resets:
+          type: [string, "null"]
+          format: date-time
+        metered_cost:
+          type: object
+          additionalProperties: false
+          properties:
+            input: { type: number, minimum: 0 }
+            output: { type: number, minimum: 0 }
+        trust:
+          enum: [remote_api, local_estimation, user_declared]

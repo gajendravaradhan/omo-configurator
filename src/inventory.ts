@@ -45,8 +45,13 @@ export function parseInventory(raw: string, source = "inventory"): Inventory {
       throw new PlutusError(`Provider \`${pid}\` in ${source} must be a mapping`, EXIT.VALIDATION);
     }
     const pp = p as Record<string, unknown>;
-    if ("reserve_policy" in pp || "promo" in pp) {
-      throw new PlutusError(`Provider \`${pid}\` must not contain reserve_policy/promo (bundle §7 deletion)`, EXIT.VALIDATION);
+    // Bundle §7 deletions hold at EVERY nesting level — not just the document top level.
+    // The anthropic provider was deleted for claiming subscription-flat model access; the
+    // prohibition applies inside provider blocks too.
+    for (const key of FORBIDDEN_TOP_KEYS) {
+      if (key in pp) {
+        throw new PlutusError(`Provider \`${pid}\` must not contain \`${key}\` (bundle §7 deletion)`, EXIT.VALIDATION);
+      }
     }
     const trust = pp.trust;
     if (typeof trust !== "string" || !TRUST_TAXONOMY.has(trust)) {

@@ -1,5 +1,3 @@
-import { PlutusError } from "../errors.ts";
-export async function discover(args: { inventoryPath: string; write: boolean }): Promise<void> {
-  void args;
-  throw new PlutusError("discover: not implemented (W3 task)");
-}
+// Thin command shim — implementation lives in src/discover.ts (W3.4).
+export { discover, parseQuotaOutput, mergeQuota, writeInventoryAtomic, fetchQuota } from "../discover.ts";
+export type { QuotaSnapshot, DiscoverArgs } from "../discover.ts";
