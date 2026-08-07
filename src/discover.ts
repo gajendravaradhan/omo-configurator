@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, copyFileSync, renameSync, rmSync, 
 import { dirname } from "node:path";
 import { stringify } from "yaml";
 import { parseInventory, type Inventory } from "./inventory.ts";
-import { LOCKFILE_PATH, modelsCachePath } from "./config.ts";
+import { lockfilePath, modelsCachePath } from "./config.ts";
 import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
@@ -145,7 +145,7 @@ function ts(): string {
  * .bak.<timestamp> backup, tmp+rename. Throws PlutusError when the lock is held or the new
  * content is invalid (target untouched in both cases).
  */
-export function writeInventoryAtomic(invPath: string, content: string, lockPath: string = LOCKFILE_PATH): { backupPath: string | null } {
+export function writeInventoryAtomic(invPath: string, content: string, lockPath: string = lockfilePath()): { backupPath: string | null } {
   // 1. Validate BEFORE touching the target (validate-before-replace).
   parseInventory(content, invPath);
 

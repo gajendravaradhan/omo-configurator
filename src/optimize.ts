@@ -10,6 +10,8 @@ import { loadTiers } from "./quality.ts";
 import { emitConfig, loadPinnedSlots } from "./emitter.ts";
 import { writeReport, ALL_UNTRUSTED_BANNER } from "./report.ts";
 import { schemaInfo } from "./validate.ts";
+import { doctorSoftCheck } from "./verify.ts";
+import { appendLedger, buildLedgerEntry } from "./ledger.ts";
 import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
@@ -65,10 +67,22 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   }
 
   const emit = emitConfig(solve.assignments, args.outputPath, { merge: args.merge });
+
+  // W5.1: doctor soft-check (never blocks; schema validation is the primary gate).
+  const doctor = await doctorSoftCheck();
+
+  // W5.3 (P3): append the telemetry ledger line — the whole v2 training input.
+  const trustLevels = Object.fromEntries(Object.entries(inventory.providers).map(([pid, p]) => [pid, p.trust]));
+  appendLedger(buildLedgerEntry(solve, caps, trustLevels, chainSha, args.mode));
+
   const reportPath = writeReport(solve, dirname(args.outputPath), {
     schemaId: schemaInfo().id,
     chainSha,
     omoVersion: installed,
+    mode: args.mode,
+    tiers,
+    trustLevels,
+    doctor,
     inventoryNames: Object.keys(inventory.providers),
   });
 

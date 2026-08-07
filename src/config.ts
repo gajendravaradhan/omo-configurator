@@ -13,18 +13,30 @@ function configHome(): string {
   return process.env.XDG_CONFIG_HOME ? process.env.XDG_CONFIG_HOME : join(homedir(), ".config");
 }
 
-export const OMO_PLUTUS_DIR = join(configHome(), "omo-plutus");
-export const DEFAULT_INVENTORY_PATH = join(OMO_PLUTUS_DIR, "inventory.yaml");
-export const PINNED_SIDECAR_PATH = join(OMO_PLUTUS_DIR, "pinned.json");
-export const LEDGER_PATH = join(OMO_PLUTUS_DIR, "history.jsonl");
-export const LOCKFILE_PATH = join(OMO_PLUTUS_DIR, ".lock");
+// Paths are resolved LAZILY (functions, not module constants) so XDG_CONFIG_HOME overrides take
+// effect when tests set them after import time.
+export function omoPlutusDir(): string {
+  return join(configHome(), "omo-plutus");
+}
+export function defaultInventoryPath(): string {
+  return join(omoPlutusDir(), "inventory.yaml");
+}
+export function pinnedSidecarPath(): string {
+  return join(omoPlutusDir(), "pinned.json");
+}
+export function ledgerPath(): string {
+  return join(omoPlutusDir(), "history.jsonl");
+}
+export function lockfilePath(): string {
+  return join(omoPlutusDir(), ".lock");
+}
 
 /** Resolve the inventory path per the priority order. */
 export function resolveInventoryPath(cliFlag?: string): string {
   if (cliFlag) return cliFlag;
   const env = process.env.OMO_PLUTUS_CONFIG;
   if (env) return env;
-  return DEFAULT_INVENTORY_PATH;
+  return defaultInventoryPath();
 }
 
 /** Resolve the opencode config target. Priority: --output flag > ~/.config/opencode/opencode.json. */

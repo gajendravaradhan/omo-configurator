@@ -20,7 +20,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFil
 import { dirname } from "node:path";
 import type { Assignment } from "./types.ts";
 import { assertValidConfig } from "./validate.ts";
-import { PINNED_SIDECAR_PATH } from "./config.ts";
+import { pinnedSidecarPath } from "./config.ts";
 import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
@@ -45,7 +45,7 @@ function ts(): string {
 }
 
 /** Load the pinned-slots sidecar (~/.config/omo-plutus/pinned.json). Missing sidecar → []. */
-export function loadPinnedSlots(path: string = PINNED_SIDECAR_PATH): string[] {
+export function loadPinnedSlots(path: string = pinnedSidecarPath()): string[] {
   if (!existsSync(path)) return [];
   try {
     const doc = JSON.parse(readFileSync(path, "utf8")) as { slots?: unknown };
