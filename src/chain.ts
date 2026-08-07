@@ -94,12 +94,12 @@ function materialize(node: AnyNode | null): unknown {
   if (!node) return null;
   switch (node.type) {
     case "Literal":
-      return (node as { value: unknown }).value;
+      return node.value;
     case "ArrayExpression":
-      return (node as { elements: (AnyNode | null)[] }).elements.map((e) => materialize(e));
+      return (node.elements as unknown[]).map((e) => materialize(e as AnyNode | null));
     case "ObjectExpression": {
       const out: Record<string, unknown> = {};
-      for (const prop of (node as { properties: AnyNode[] }).properties) {
+      for (const prop of node.properties as AnyNode[]) {
         if (prop.type !== "Property") continue;
         const k = keyName((prop as { key: unknown }).key);
         if (k !== null) out[k] = materialize((prop as { value: AnyNode }).value);
