@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "as_of": "2026-08-07",
+  "comment": "Static capability tiers (bundle §4: benchmark catalogue infra DELETED; tiers.json is data-only, no fetcher). Capability ∈ {1.0, 0.7, 0.4} from models.json flags + tiers.json. 0.9 discount when self_reported (P6). Entries older than 90 days are flagged in the report (P6).",
+  "families": {
+    "gpt": {
+      "capability": 1.0,
+      "source_url": "https://platform.openai.com/docs/models",
+      "as_of": "2026-08-01",
+      "self_reported": false,
+      "benchmark": "SWE-bench Verified ~68% (OpenAI official)"
+    },
+    "gpt-sol": {
+      "capability": 1.0,
+      "source_url": "https://platform.openai.com/docs/models",
+      "as_of": "2026-08-01",
+      "self_reported": false,
+      "benchmark": "Frontier solver tier"
+    },
+    "gpt-luna": {
+      "capability": 1.0,
+      "source_url": "https://platform.openai.com/docs/models",
+      "as_of": "2026-08-01",
+      "self_reported": false,
+      "benchmark": "Frontier fast tier"
+    },
+    "gpt-nano": {
+      "capability": 0.7,
+      "source_url": "https://platform.openai.com/docs/models",
+      "as_of": "2026-08-01",
+      "self_reported": false,
+      "benchmark": "Lightweight tier"
+    },
+    "claude": {
+      "capability": 1.0,
+      "source_url": "https://docs.anthropic.com",
+      "as_of": "2026-08-01",
+      "self_reported": false,
+      "benchmark": "Frontier tier"
+    },
+    "deepseek": {
+      "capability": 0.7,
+      "source_url": "https://api-docs.deepseek.com",
+      "as_of": "2026-07-15",
+      "self_reported": true,
+      "benchmark": "DeepSeek official docs (self-reported)"
+    },
+    "deepseek-flash": {
+      "capability": 0.7,
+      "source_url": "https://api-docs.deepseek.com",
+      "as_of": "2026-07-15",
+      "self_reported": true,
+      "benchmark": "DeepSeek official docs (self-reported)"
+    },
+    "deepseek-thinking": {
+      "capability": 0.7,
+      "source_url": "https://api-docs.deepseek.com",
+      "as_of": "2026-07-15",
+      "self_reported": true,
+      "benchmark": "DeepSeek official docs (self-reported)"
+    },
+    "gemini": {
+      "capability": 0.7,
+      "source_url": "https://ai.google.dev/gemini-api/docs",
+      "as_of": "2026-08-01",
+      "self_reported": false,
+      "benchmark": "Google official"
+    },
+    "kimi": {
+      "capability": 0.7,
+      "source_url": "https://platform.moonshotai.cn/docs",
+      "as_of": "2026-08-01",
+      "self_reported": true,
+      "benchmark": "Moonshot official"
+    },
+    "kimi-k3": {
+      "capability": 0.7,
+      "source_url": "https://platform.moonshotai.cn/docs",
+      "as_of": "2026-08-01",
+      "self_reported": true,
+      "benchmark": "Moonshot official"
+    },
+    "glm": {
+      "capability": 0.7,
+      "source_url": "https://z.ai",
+      "as_of": "2026-08-01",
+      "self_reported": true,
+      "benchmark": "Zhipu official"
+    },
+    "minimax": {
+      "capability": 0.4,
+      "source_url": "https://platform.minimaxi.com",
+      "as_of": "2026-08-01",
+      "self_reported": true,
+      "benchmark": "MiniMax official"
+    },
+    "qwen": {
+      "capability": 0.7,
+      "source_url": "https://qwenlm.github.io",
+      "as_of": "2026-08-01",
+      "self_reported": true,
+      "benchmark": "Qwen team"
+    }
+  }
+}

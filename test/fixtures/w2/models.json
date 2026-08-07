@@ -1,0 +1,35 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "models": {
+      "gpt-5.6-luna-fast": { "id": "gpt-5.6-luna-fast", "family": "gpt-luna", "reasoning": false, "tool_call": true, "pricing": { "input": 0.27, "output": 1.1 } },
+      "gpt-5.6-sol": { "id": "gpt-5.6-sol", "family": "gpt-sol", "reasoning": true, "tool_call": true, "pricing": { "input": 15, "output": 60 } },
+      "gpt-5.5": { "id": "gpt-5.5", "family": "gpt", "reasoning": true, "tool_call": true, "pricing": { "input": 10, "output": 40 } },
+      "gpt-5.4-nano": { "id": "gpt-5.4-nano", "family": "gpt-nano", "reasoning": false, "tool_call": true, "pricing": { "input": 0.27, "output": 1.1 } }
+    }
+  },
+  "deepseek": {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "models": {
+      "deepseek-v4-flash": { "id": "deepseek-v4-flash", "family": "deepseek-flash", "reasoning": false, "tool_call": true, "pricing": { "input": 0.27, "output": 1.1 } },
+      "deepseek-v4-pro": { "id": "deepseek-v4-pro", "family": "deepseek", "reasoning": true, "tool_call": true, "pricing": { "input": 2, "output": 8 } }
+    }
+  },
+  "vercel": {
+    "id": "vercel",
+    "name": "Vercel",
+    "models": {
+      "minimax-m2.7-highspeed": { "id": "minimax-m2.7-highspeed", "family": "minimax", "reasoning": false, "tool_call": true, "pricing": { "input": 0.3, "output": 1.2 } }
+    }
+  },
+  "openrouter": {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "models": {
+      "gpt-5.6-sol": { "id": "gpt-5.6-sol", "family": "gpt-sol", "reasoning": true, "tool_call": true, "pricing": { "input": 18, "output": 70 } },
+      "gpt-5.6-luna-fast": { "id": "gpt-5.6-luna-fast", "family": "gpt-luna", "reasoning": false, "tool_call": true, "pricing": { "input": 0.27, "output": 1.1 } }
+    }
+  }
+}

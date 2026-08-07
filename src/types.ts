@@ -108,9 +108,9 @@ export interface Candidate {
   variant?: string;
   /** fit ∈ {1.0 head, 0.8 member, 0.5 family-match-only, 0 forbidden}. */
   fit: number;
-  /** capability ∈ {1.0, 0.7, 0.4} from models.json flags + tiers.json. */
+  /** capability ∈ {1.0, 0.7, 0.4} from models.json flags + tiers.json (0.9 self-report discount). */
   capability: number;
-  /** quality = fit × capability (weighted sum, P5 replacement of product). */
+  /** quality = fit × capability (P5 replacement of product). */
   quality: number;
   /** Projected metered $ per the entry; 0 for flat/subscription (tiebreak #1). */
   projectedCost: number;
@@ -118,6 +118,8 @@ export interface Candidate {
   quotaHeadroom: number;
   /** Whether the providing capability is trusted (non-null cap) — affects overflow-only rule. */
   trusted: boolean;
+  /** True when this candidate was injected (S6 DeepSeek) rather than from the slot's own chain. */
+  injected?: boolean;
 }
 
 /** A solved assignment — primary model + fallback list for one slot. */

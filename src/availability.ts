@@ -7,12 +7,26 @@ import { existsSync, readFileSync } from "node:fs";
 import { modelsCachePath } from "./config.ts";
 import type { Inventory } from "./inventory.ts";
 
+/** Capability-relevant model metadata read from the live models.json model entry (W2.3).
+ *  Field names follow the live file shape (snake_case flags: `tool_call`, `reasoning`, `family`). */
+export interface ModelMeta {
+  /** models.json family id — looked up in tiers.json for the tier capability + P6 provenance. */
+  family?: string;
+  reasoning?: boolean;
+  toolCall?: boolean;
+  /** Metered $ per token. Absent/zero → flat/subscription (projected cost 0, P5 tiebreak #1). */
+  pricing?: { input?: number; output?: number };
+}
+
 export class Availability {
   /** provider id → set of available model ids. Empty set = provider declared but no specific models known. */
   readonly modelsByProvider: Map<string, Set<string>>;
+  /** provider id → model id → capability metadata (from models.json). */
+  readonly metaByProvider: Map<string, Map<string, ModelMeta>>;
 
-  constructor(modelsByProvider: Map<string, Set<string>>) {
+  constructor(modelsByProvider: Map<string, Set<string>>, metaByProvider: Map<string, Map<string, ModelMeta>>) {
     this.modelsByProvider = modelsByProvider;
+    this.metaByProvider = metaByProvider;
   }
 
   hasModel(provider: string, model: string): boolean {
@@ -22,38 +36,82 @@ export class Availability {
     return set.has(model);
   }
 
+  /** Capability metadata for a (provider, model) pair; undefined when models.json lacks an entry. */
+  modelMeta(provider: string, model: string): ModelMeta | undefined {
+    return this.metaByProvider.get(provider)?.get(model);
+  }
+
+  /** Model ids known for a provider (empty for inventory-declared providers with no models.json hit). */
+  modelsFor(provider: string): string[] {
+    return [...(this.modelsByProvider.get(provider) ?? [])];
+  }
+
   providers(): string[] {
     return [...this.modelsByProvider.keys()];
   }
 }
 
-export function availabilityFromModelsFile(path: string): Map<string, Set<string>> {
-  const map = new Map<string, Set<string>>();
+interface RawModelEntry {
+  family?: unknown;
+  reasoning?: unknown;
+  tool_call?: unknown;
+  pricing?: unknown;
+}
+
+function parseMeta(raw: RawModelEntry): ModelMeta {
+  const meta: ModelMeta = {};
+  if (typeof raw.family === "string") meta.family = raw.family;
+  if (typeof raw.reasoning === "boolean") meta.reasoning = raw.reasoning;
+  if (typeof raw.tool_call === "boolean") meta.toolCall = raw.tool_call;
+  if (raw.pricing && typeof raw.pricing === "object" && !Array.isArray(raw.pricing)) {
+    const p = raw.pricing as Record<string, unknown>;
+    const pricing: { input?: number; output?: number } = {};
+    if (typeof p.input === "number") pricing.input = p.input;
+    if (typeof p.output === "number") pricing.output = p.output;
+    if (pricing.input !== undefined || pricing.output !== undefined) meta.pricing = pricing;
+  }
+  return meta;
+}
+
+export function availabilityFromModelsFile(path: string): {
+  modelsByProvider: Map<string, Set<string>>;
+  metaByProvider: Map<string, Map<string, ModelMeta>>;
+} {
+  const modelsByProvider = new Map<string, Set<string>>();
+  const metaByProvider = new Map<string, Map<string, ModelMeta>>();
   const raw = readFileSync(path, "utf8");
-  const doc = JSON.parse(raw) as Record<string, { models?: Record<string, unknown> }>;
+  const doc = JSON.parse(raw) as Record<string, { models?: Record<string, RawModelEntry> }>;
   for (const [pid, block] of Object.entries(doc)) {
     const models = block?.models;
     if (typeof models !== "object" || models === null || Array.isArray(models)) continue;
-    map.set(pid, new Set(Object.keys(models)));
+    modelsByProvider.set(pid, new Set(Object.keys(models)));
+    const metas = new Map<string, ModelMeta>();
+    for (const [mid, entry] of Object.entries(models)) metas.set(mid, parseMeta(entry));
+    metaByProvider.set(pid, metas);
   }
-  return map;
+  return { modelsByProvider, metaByProvider };
 }
 
 /** Build Availability from models.json + inventory-declared providers. */
 export function loadAvailability(inventory: Inventory, modelsPathOverride?: string): Availability {
-  const map = new Map<string, Set<string>>();
+  const modelsByProvider = new Map<string, Set<string>>();
+  const metaByProvider = new Map<string, Map<string, ModelMeta>>();
   const modelsPath = modelsPathOverride ?? modelsCachePath();
   if (existsSync(modelsPath)) {
     try {
       const fromFile = availabilityFromModelsFile(modelsPath);
-      for (const [pid, set] of fromFile) map.set(pid, set);
+      for (const [pid, set] of fromFile.modelsByProvider) modelsByProvider.set(pid, set);
+      for (const [pid, metas] of fromFile.metaByProvider) metaByProvider.set(pid, metas);
     } catch {
       // Corrupt/missing cache → fall through to inventory-only availability (report notes this).
     }
   }
   // Inventory-declared providers are usable even without a models.json hit (empty set = any model).
   for (const pid of Object.keys(inventory.providers)) {
-    if (!map.has(pid)) map.set(pid, new Set<string>());
+    if (!modelsByProvider.has(pid)) {
+      modelsByProvider.set(pid, new Set<string>());
+      metaByProvider.set(pid, new Map<string, ModelMeta>());
+    }
   }
-  return new Availability(map);
+  return new Availability(modelsByProvider, metaByProvider);
 }

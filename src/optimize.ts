@@ -3,9 +3,10 @@
 // W4.2 adds the slot-level deep-merge.
 import { dirname, join } from "node:path";
 import { extractChains, assertOmoVersion, installedOmoVersion, pinnedChainSha, PROBED_OMO_VERSION } from "./chain.ts";
-import { loadInventory, capMap, trustedSetEmpty } from "./inventory.ts";
+import { loadInventory, capMap } from "./inventory.ts";
 import { loadAvailability } from "./availability.ts";
 import { solveChains } from "./solver.ts";
+import { loadTiers } from "./quality.ts";
 import { emitConfig } from "./emitter.ts";
 import { writeReport, ALL_UNTRUSTED_BANNER } from "./report.ts";
 import { schemaInfo } from "./validate.ts";
@@ -32,7 +33,6 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
 
   const inventory = loadInventory(args.inventoryPath);
   const caps = capMap(inventory);
-  const allUntrusted = trustedSetEmpty(inventory);
 
   // P8 startup check: emit-shape decision was made against a probed omo version.
   const installed = installedOmoVersion();
@@ -41,7 +41,9 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
 
   const chains = extractChains();
   const availability = loadAvailability(inventory);
-  const solve = solveChains(chains, availability, caps);
+  const tiers = loadTiers();
+  const solve = solveChains({ chains, availability, caps, tiers });
+  const allUntrusted = solve.allUntrusted;
 
   // P8: emit-shape decision note — printed once per run; agent fallback_models is schema-forced and
   // config migrate (omo v4.19.4, VERIFIED 2026-08-07) emits NO deprecation warning for it.

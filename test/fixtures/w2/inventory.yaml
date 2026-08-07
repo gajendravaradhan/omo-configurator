@@ -1,0 +1,19 @@
+# W2 fixture inventory — exercises overflow-only (deepseek cap=null), trusted windows (openai/vercel/openrouter).
+# Go (opencode-go) NOT declared here → Go = overflow-only + 1x over-estimate + loud warning per SPIKE-06 gate.
+version: 1
+providers:
+  openai:
+    cap: 0.8
+    window_resets: "2026-08-15T00:00:00Z"
+    trust: remote_api
+  deepseek:
+    cap: null
+    trust: user_declared
+  vercel:
+    cap: 0.9
+    window_resets: "2026-08-15T00:00:00Z"
+    trust: local_estimation
+  openrouter:
+    cap: 0.99
+    window_resets: "2026-08-15T00:00:00Z"
+    trust: local_estimation
