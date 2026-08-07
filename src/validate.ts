@@ -80,13 +80,17 @@ export function assertValidConfig(config: unknown, what = "config"): void {
 }
 
 /**
- * Validate ONLY the optimizer-owned surface of an omo.jsonc [opencode] section: the agents and
- * categories entries Plutus replaced. Pre-existing user content (team_mode, ultrawork, etc.) is
- * deliberately OUT of the gate — OMO's runtime loader tolerates schema-loose content (verified:
+ * Validate ONLY the optimizer-owned surface of an omo.jsonc [opencode] section: the specific keys
+ * Plutus writes on the slots it replaced (model, variant, reasoning/reasoningEffort,
+ * models/fallback_models). Pre-existing user content — both whole entries Plutus didn't touch
+ * (team_mode) and user sub-keys inside owned slots (ultrawork, permission, prompt, etc.) — is
+ * deliberately OUT of the gate: OMO's runtime loader tolerates schema-loose content (verified:
  * the live NAS config fails full-schema validation yet loads fine), and S5's contract is "never
  * write invalid OPTIMIZER output", not "reject the user's own tolerated config".
- * Returns the errors for the optimizer-owned slots (empty = gate passes).
+ * Returns the errors for the optimizer-written keys (empty = gate passes).
  */
+const OWNED_SLOT_KEYS = ["model", "variant", "reasoning", "reasoningEffort", "models", "fallback_models"] as const;
+
 export function validateOpencodeOwned(
   section: Record<string, unknown>,
   ownedAgents: string[],
@@ -100,11 +104,25 @@ export function validateOpencodeOwned(
   };
   if (ownedAgents.length > 0) {
     const agents = (section.agents ?? {}) as Record<string, unknown>;
-    probe.agents = Object.fromEntries(ownedAgents.filter((a) => a in agents).map((a) => [a, agents[a]]));
+    probe.agents = {};
+    for (const a of ownedAgents) {
+      const entry = agents[a];
+      if (!entry || typeof entry !== "object") continue;
+      const owned: Record<string, unknown> = {};
+      for (const k of OWNED_SLOT_KEYS) if (k in (entry as Record<string, unknown>)) owned[k] = (entry as Record<string, unknown>)[k];
+      (probe.agents as Record<string, unknown>)[a] = owned;
+    }
   }
   if (ownedCategories.length > 0) {
     const categories = (section.categories ?? {}) as Record<string, unknown>;
-    probe.categories = Object.fromEntries(ownedCategories.filter((c) => c in categories).map((c) => [c, categories[c]]));
+    probe.categories = {};
+    for (const c of ownedCategories) {
+      const entry = categories[c];
+      if (!entry || typeof entry !== "object") continue;
+      const owned: Record<string, unknown> = {};
+      for (const k of OWNED_SLOT_KEYS) if (k in (entry as Record<string, unknown>)) owned[k] = (entry as Record<string, unknown>)[k];
+      (probe.categories as Record<string, unknown>)[c] = owned;
+    }
   }
   const valid = validate(probe);
   if (valid) return [];
