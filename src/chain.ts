@@ -101,8 +101,8 @@ function materialize(node: AnyNode | null): unknown {
       const out: Record<string, unknown> = {};
       for (const prop of node.properties as AnyNode[]) {
         if (prop.type !== "Property") continue;
-        const k = keyName((prop as { key: unknown }).key);
-        if (k !== null) out[k] = materialize((prop as { value: AnyNode }).value);
+        const k = keyName(prop.key);
+        if (k !== null) out[k] = materialize(prop.value as AnyNode | null);
       }
       return out;
     }
