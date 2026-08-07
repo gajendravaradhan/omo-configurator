@@ -25,7 +25,7 @@
 // excluded from the legal slot set).
 import type { Availability } from "./availability.ts";
 import { filterForbidden } from "./forbidden.ts";
-import { compareCandidates, computeCapability, FIT_INJECTED, type Tiers } from "./quality.ts";
+import { compareCandidates, computeCapability, FIT_INJECTED, isGptFamily, isMinimaxFamily, type Tiers } from "./quality.ts";
 import type { Assignment, Candidate, ChainEntry, SlotChain, SolveResult } from "./types.ts";
 
 export interface SolveInput {
@@ -40,14 +40,6 @@ export interface SolveInput {
 
 /** S6: GPT-family legal slots that receive DeepSeek injection. */
 const GPT_FAMILY_SLOTS: ReadonlySet<string> = new Set(["oracle", "deep", "ultrabrain", "prometheus"]);
-
-function isGptModel(model: string): boolean {
-  return model.startsWith("gpt-");
-}
-
-function isMinimaxModel(model: string): boolean {
-  return model.toLowerCase().includes("minimax");
-}
 
 function isDeepseekModel(model: string): boolean {
   return model.startsWith("deepseek");
@@ -106,7 +98,7 @@ function injectedDeepseek(
   tiers: Tiers,
 ): Candidate[] {
   if (!GPT_FAMILY_SLOTS.has(chain.name)) return [];
-  if (!chain.fallbackChain.some((e) => isGptModel(e.model))) return [];
+  if (!chain.fallbackChain.some((e) => isGptFamily(e.model))) return [];
   const injected: Candidate[] = [];
   for (const provider of availability.providers()) {
     if (!provider.toLowerCase().includes("deepseek")) continue;
@@ -144,8 +136,8 @@ function insertInjected(list: Candidate[], injected: Candidate[]): Candidate[] {
   let gptEnd = -1;
   let miniStart = -1;
   for (let i = 0; i < list.length; i++) {
-    if (isGptModel(list[i]!.model)) gptEnd = i;
-    if (miniStart === -1 && isMinimaxModel(list[i]!.model)) miniStart = i;
+    if (isGptFamily(list[i]!.model)) gptEnd = i;
+    if (miniStart === -1 && isMinimaxFamily(list[i]!.model)) miniStart = i;
   }
   let at: number;
   if (gptEnd >= 0 && miniStart >= 0) at = Math.min(gptEnd + 1, miniStart);

@@ -71,34 +71,18 @@ export function parseQuotaOutput(raw: string): QuotaSnapshot {
     if (typeof p !== "object" || p === null || Array.isArray(p)) {
       throw new PlutusError(`quota output for provider \`${pid}\` is not a mapping. Raw output:\n${raw}`, EXIT.RUNTIME);
     }
-    let cap: number | null;
-    if (typeof p.status === "string") {
-      // Ground-truth: "unavailable" = no verified capacity → null (untrusted). Available statuses
-      // must carry a numeric quota we can map — otherwise refuse loudly.
-      if (p.status === "unavailable") {
-        cap = null;
-      } else {
-        const n = toCap(p.cap) ?? toCap(p.quota);
-        if (n === undefined) {
-          throw new PlutusError(
-            `quota output for provider \`${pid}\` reports status "${p.status}" with no numeric cap/quota. Raw output:\n${raw}`,
-            EXIT.RUNTIME,
-          );
-        }
-        cap = n;
-      }
-    } else {
-      const n = toCap(p.cap) ?? toCap(p.quota);
-      if (n === undefined) {
-        throw new PlutusError(
-          `quota output for provider \`${pid}\` has no status and no numeric cap/quota. Raw output:\n${raw}`,
-          EXIT.RUNTIME,
-        );
-      }
-      cap = n;
+    // Ground-truth: "unavailable" = no verified capacity → null (untrusted). Available statuses (or
+    // absent status) must carry a numeric quota we can map — otherwise refuse loudly.
+    const unavailable = p.status === "unavailable";
+    const rawCap = unavailable ? null : toCap(p.cap) ?? toCap(p.quota);
+    if (!unavailable && rawCap === undefined) {
+      throw new PlutusError(
+        `quota output for provider \`${pid}\` has no numeric cap/quota. Raw output:\n${raw}`,
+        EXIT.RUNTIME,
+      );
     }
     providers[pid] = {
-      cap,
+      cap: rawCap ?? null,
       window_resets: typeof p.window_resets === "string" ? p.window_resets : null,
     };
   }
