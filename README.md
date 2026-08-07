@@ -135,6 +135,57 @@ runtime; install it with `bun add -d @slkiser/opencode-quota` if you want live q
 
 ---
 
+## Web UI
+
+A full command-center front-end for every Plutus operation and capability, built on
+**Bun + React** (zero extra runtime deps beyond `react`/`react-dom`; the UI is served by
+the same Bun server that exposes the API).
+
+### Start it
+
+```bash
+cd web && bun install && bun run build.mjs   # build the UI once (web/dist is gitignored — build before serving)
+bun run server/index.ts        # serves API + web/dist on http://localhost:4040
+```
+
+Point a browser at `http://localhost:4040` — the server serves the built app and the
+`/api/*` JSON endpoints same-origin.
+
+### What every operation maps to
+
+| View | Endpoint(s) | Plutus capability |
+|---|---|---|
+| **Dashboard** | `GET /api/status` | omo version + P8 gate, chain SHA, drift, inventory/db presence, schema `$id` |
+| **Optimize** | `GET /api/solve/preview`, `POST /api/optimize` | live solve preview (pure read, no emit) + full emit (deep-merge toggle, ledger append, backup) |
+| **Discover** | `POST /api/discover/run` | quota output mapping — raw preserved, never silently degraded |
+| **Chains** | `GET /api/chains` | the 19-slot fallback-chain inventory (live acorn extraction) |
+| **Token History** | `GET /api/token-history` | per agent × model consumption from opencode.db (read-only, SPIKE-02) |
+| **Inventory** | `GET/POST /api/inventory` | view + validated edit of `inventory.yaml` (server validates shape + §7 deletions before saving) |
+| **Pinned** | `GET/POST /api/pinned` | pinned-slots sidecar (shared with emitter + challenger) |
+| **Rollback** | `GET /api/rollback`, `POST /api/rollback/restore` | backup list + validated restore (invalid → rejected, no file replaced) |
+| **Challenge** | `POST /api/challenge/pin` | v1 stub: pin a challenger model via the shared sidecar |
+| **Ledger** | `GET /api/ledger` | append-only telemetry `history.jsonl` (P3) |
+| **Report** | `GET /api/report` | the auditable `plutus-report.md` |
+
+### Error & concurrency semantics
+
+- `PlutusError` maps to HTTP: validation → **400**, runtime → **500**, SPIKE/version-mismatch
+  (P8) → **409**. The UI surfaces the message + exit code, never a raw stack.
+- Mutating operations (`optimize`, `discover/run`, `inventory`, `pinned`, `rollback/restore`,
+  `challenge/pin`) are single-flight behind an in-process mutex — concurrent duplicates are
+  rejected with a clear error, mirroring the CLI's advisory lockfile discipline.
+- `solve/preview` is a **pure read**: it never emits a file and never appends the ledger.
+
+### Design
+
+`DESIGN.md` is the design-system contract (dark command-center aesthetic, tonal-shift
+surfaces, accent reserved for Plutus decisions, WCAG 2.2 AA, reduced-motion respected).
+Tokens live in `web/src/design.css`; primitives (`Panel`, `DataTable`, `RunButton`, `Badge`,
+`StatusDot`, `Toggle`, `Toast`, `MonoChip`) in `web/src/components/ui.tsx`. No emojis —
+inline SVG icons only.
+
+---
+
 ## The five commands
 
 ### `plutus optimize`
