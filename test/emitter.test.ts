@@ -241,3 +241,18 @@ test("omo.jsonc: readOmoConfig parses the commented live-style fixture (mirrors 
   expect((oc.agents as any).build.model).toBe("openai/gpt-5.6-sol");
   expect((oc.team_mode as any).enabled).toBe(true);
 });
+
+test("omo.jsonc: parseJsonc handles trailing commas (JSONC feature OMO allows)", () => {
+  const raw = '{\n  "a": [\n    { "m": "x", "r": "high", },\n    { "m": "y", },\n  ],\n  "b": 2,\n}\n';
+  const doc = parseJsonc(raw) as { a: Array<Record<string, unknown>>; b: number };
+  expect(doc.a).toHaveLength(2);
+  expect(doc.a[0]!.r).toBe("high");
+  expect(doc.b).toBe(2);
+});
+
+test("omo.jsonc: readOmoConfig parses the REAL Mac config (comments + trailing commas)", () => {
+  const doc = readOmoConfig("/Users/gajendra/.omo/omo.jsonc")!;
+  const oc = (doc["[opencode]"] ?? doc) as Record<string, unknown>;
+  expect((oc.agents as Record<string, unknown>).sisyphus).toBeDefined();
+  expect((oc.categories as Record<string, unknown>)["visual-engineering"]).toBeDefined();
+});

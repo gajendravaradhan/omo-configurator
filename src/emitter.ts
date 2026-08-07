@@ -151,13 +151,15 @@ export function emitConfig(assignments: Assignment[], outputPath: string, opts: 
 /** Preserved top-level keys that must survive a merge into an existing omo.jsonc document. */
 const OMO_TOP_LEVEL_KEEP = new Set(["codegraph", "[senpi]", "[codex]", "teams", "profiles", "models", "task", "legacy_migrations", "_migrations"]);
 
-/** Parse a JSONC document (strips // and /* *\/ comments, string-aware so URLs like https:// survive). */
+/** Parse a JSONC document (strips // and /* *\/ comments AND trailing commas — both JSONC
+ *  features OMO allows; string-aware so URLs like https:// survive). */
 export function parseJsonc(raw: string): unknown {
   let out = "";
   let inString: "'" | '"' | null = null;
   let escaped = false;
   let inLineComment = false;
   let inBlockComment = false;
+  let pendingComma = false;
   for (let i = 0; i < raw.length; i++) {
     const c = raw[i]!;
     const next = raw[i + 1];
@@ -176,9 +178,26 @@ export function parseJsonc(raw: string): unknown {
       if (c === inString) inString = null;
       continue;
     }
-    if (c === '"' || c === "'") { inString = c; out += c; continue; }
+    if (c === '"' || c === "'") {
+      if (pendingComma) { out += ","; pendingComma = false; }
+      inString = c; out += c; continue;
+    }
     if (c === "/" && next === "/") { inLineComment = true; i++; continue; }
     if (c === "/" && next === "*") { inBlockComment = true; i++; continue; }
+    // A comma immediately before a closing brace/bracket is a trailing comma — drop it.
+    // Whitespace carries the pending comma (it must survive "a: 1, }" so the comma is
+    // only flushed at the next significant token, and dropped if that token is a closer).
+    if (c === ",") { pendingComma = true; continue; }
+    if (c === "}" || c === "]") {
+      pendingComma = false; // comma was trailing — already dropped
+      out += c;
+      continue;
+    }
+    if (c === " " || c === "\t" || c === "\n" || c === "\r") {
+      out += c; // carry the pending comma across whitespace
+      continue;
+    }
+    if (pendingComma) { out += ","; pendingComma = false; }
     out += c;
   }
   return JSON.parse(out);
