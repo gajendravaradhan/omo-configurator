@@ -288,18 +288,18 @@ plutus rollback [OPTIONS]
 
       --list          Just list available backups
       --to TS         Timestamp of the backup to restore (or "latest")
-      --output PATH   oh-my-opencode.json target path
+      --output PATH   omo.jsonc target path (default ~/.omo/omo.jsonc)
 ```
 
-- Lists `oh-my-opencode.json.bak.<timestamp>` files next to the target.
+- Lists `omo.jsonc.bak.<timestamp>` files next to the target.
 - Restores `latest` or a specific timestamp.
 - **Validates the restored config against the LOCAL schema before replacing.** An invalid
   restore is rejected with **exit 2 and the target untouched** — no orphan writes, ever.
 - Atomic restore (tmp+rename), same discipline as the emitter.
 
 ```bash
-plutus rollback --list --output ~/.config/opencode/oh-my-opencode.json
-plutus rollback --to latest --output ~/.config/opencode/oh-my-opencode.json
+plutus rollback --list --output ~/.omo/omo.jsonc
+plutus rollback --to latest --output ~/.omo/omo.jsonc
 ```
 
 ### `plutus challenge`
@@ -340,7 +340,7 @@ All paths resolve lazily (so `XDG_CONFIG_HOME` overrides work in tests). Priorit
 | `~/.config/omo-plutus/pinned.json` | Pinned slots sidecar (skipped by optimize) |
 | `~/.config/omo-plutus/history.jsonl` | Append-only telemetry ledger (P3) |
 | `~/.config/omo-plutus/.lock` | Advisory lockfile for inventory write-back |
-| `~/.config/opencode/oh-my-opencode.json` | Emit target (default) |
+| `~/.omo/omo.jsonc` | Emit target (default — the live OMO 4.19.4 config) |
 | `~/.cache/opencode/models.json` | Live model availability + capability flags |
 
 ### `inventory.yaml`
@@ -388,7 +388,7 @@ Rules (enforced by the loader at **every** nesting level):
 
 Pinned slots are **skipped by the solver** and **never touched by the merge**. This is the
 v1 mechanism for "hands off this slot" (and what `plutus challenge` uses). It is a
-**sidecar** — never written into `oh-my-opencode.json` (the schema is
+**sidecar** — never written into `omo.jsonc` (the schema is
 `additionalProperties: false` at three levels; an `x-plutus-pinned` style key would fail
 validation).
 
