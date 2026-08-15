@@ -14,49 +14,30 @@ export function snapshotPath(): string {
 }
 
 export interface DriftResult {
-  ok: boolean;
-  sha: string;
-  snapshotSha: string;
-  delta: string[];
+  ok: boolean; sha: string; snapshotSha: string; delta: string[];
 }
 
 interface SnapshotSlot {
-  kind: string;
-  name: string;
-  fallbackChain: Array<{ providers: string[]; model: string; variant?: string }>;
+  kind: string; name: string; fallbackChain: Array<{ providers: string[]; model: string; variant?: string }>;
 }
 
 /** Compare current parsed chains against the vendored snapshot. */
 export function diffChains(): DriftResult {
-  const sha = pinnedChainSha();
-  const snapshot = JSON.parse(readFileSync(snapshotPath(), "utf8")) as { pinned_sha?: string; slots: SnapshotSlot[] };
-  const current = extractChains();
+  const sha = pinnedChainSha(); const snapshot = JSON.parse(readFileSync(snapshotPath(), "utf8")) as { pinned_sha?: string; slots: SnapshotSlot[] }; const current = extractChains();
 
-  const delta: string[] = [];
-  const snapSlots = new Map(snapshot.slots.map((s) => [`${s.kind}:${s.name}`, s]));
-  const curSlots = new Map(current.map((s) => [`${s.kind}:${s.name}`, s]));
+  const delta: string[] = []; const snapSlots = new Map(snapshot.slots.map((s) => [`${s.kind}:${s.name}`, s])); const curSlots = new Map(current.map((s) => [`${s.kind}:${s.name}`, s]));
 
-  for (const key of curSlots.keys()) {
-    if (!snapSlots.has(key)) delta.push(`+ slot added: ${key}`);
-  }
-  for (const key of snapSlots.keys()) {
-    if (!curSlots.has(key)) delta.push(`- slot removed: ${key}`);
-  }
+  for (const key of curSlots.keys()) if (!snapSlots.has(key)) delta.push(`+ slot added: ${key}`);
+  for (const key of snapSlots.keys()) if (!curSlots.has(key)) delta.push(`- slot removed: ${key}`);
   for (const key of curSlots.keys()) {
     const s = snapSlots.get(key);
     const c = curSlots.get(key);
     if (!s || !c) continue;
     // Normalize to vendor-relevant fields (providers/model/variant) — position is derived at parse time.
     const norm = (e: { providers: string[]; model: string; variant?: string }) => JSON.stringify({ providers: e.providers, model: e.model, ...(e.variant ? { variant: e.variant } : {}) });
-    const sChain = s.fallbackChain.map(norm);
-    const cChain = c.fallbackChain.map(norm);
-    if (sChain.length !== cChain.length) {
-      delta.push(`~ slot ${key}: chain length ${sChain.length} → ${cChain.length}`);
-    } else {
-      for (let i = 0; i < sChain.length; i++) {
-        if (sChain[i] !== cChain[i]) delta.push(`~ slot ${key} entry ${i}: ${sChain[i]} → ${cChain[i]}`);
-      }
-    }
+    const sChain = s.fallbackChain.map(norm); const cChain = c.fallbackChain.map(norm);
+    if (sChain.length !== cChain.length) delta.push(`~ slot ${key}: chain length ${sChain.length} → ${cChain.length}`);
+    else for (let i = 0; i < sChain.length; i++) if (sChain[i] !== cChain[i]) delta.push(`~ slot ${key} entry ${i}: ${sChain[i]} → ${cChain[i]}`);
   }
   return { ok: delta.length === 0, sha, snapshotSha: snapshot.pinned_sha ?? "(missing)", delta };
 }
@@ -80,8 +61,7 @@ export async function checkChains(): Promise<void> {
       // Same chains, but the source content hash drifted (comment/format change) — informational.
       console.warn(`[check-chains] chain content hash drifted (snapshot ${d.snapshotSha.slice(0, 12)}… vs parsed ${d.sha.slice(0, 12)}…) — chains structurally identical`);
     }
-    console.log("[check-chains] OK — parsed chains match vendored snapshot");
-    return;
+    console.log("[check-chains] OK — parsed chains match vendored snapshot"); return;
   }
   for (const line of d.delta.slice(0, 50)) console.warn(`[check-chains] DRIFT ${line}`);
   if (d.delta.length > 50) console.warn(`[check-chains] …and ${d.delta.length - 50} more drift lines`);

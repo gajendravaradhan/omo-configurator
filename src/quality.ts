@@ -18,17 +18,12 @@ import type { Availability } from "./availability.ts";
 import type { Candidate } from "./types.ts";
 
 export interface TierEntry {
-  capability: number;
-  source_url: string;
-  as_of: string;
-  self_reported: boolean;
-  benchmark: string;
+  capability: number; source_url: string; as_of: string;
+  self_reported: boolean; benchmark: string;
 }
 
 export interface Tiers {
-  version: number;
-  as_of: string;
-  families: Record<string, TierEntry>;
+  version: number; as_of: string; families: Record<string, TierEntry>;
 }
 
 const DEFAULT_TIERS_PATH = join(import.meta.dir, "..", "tiers.json");
@@ -58,10 +53,8 @@ export function isMinimaxFamily(model: string): boolean {
 
 /** Capability base from models.json flags: reasoning+tool_call → 1.0, one → 0.7, none → 0.4. */
 function capabilityFromFlags(reasoning: unknown, toolCall: unknown): number {
-  const r = Boolean(reasoning);
-  const t = Boolean(toolCall);
-  if (r && t) return 1.0;
-  if (r || t) return 0.7;
+  const r = Boolean(reasoning), t = Boolean(toolCall);
+  if (r && t) return 1.0; if (r || t) return 0.7;
   return 0.4;
 }
 
@@ -71,16 +64,12 @@ export function computeCapability(
   availability: Availability,
   tiers: Tiers,
 ): number {
-  const entry = availability.modelMeta(ref.provider, ref.model);
-  let base = entry ? capabilityFromFlags(entry.reasoning, entry.toolCall) : 0.7;
+  const entry = availability.modelMeta(ref.provider, ref.model); let base = entry ? capabilityFromFlags(entry.reasoning, entry.toolCall) : 0.7;
 
   const family = typeof entry?.family === "string" ? entry.family : undefined;
   if (family) {
     const tier = tiers.families[family] ?? tiers.families[family.split("-")[0]!];
-    if (tier) {
-      const adjusted = tier.capability * (tier.self_reported ? 0.9 : 1.0);
-      base = Math.min(base, adjusted);
-    }
+    if (tier) base = Math.min(base, tier.capability * (tier.self_reported ? 0.9 : 1.0));
   }
   return Math.round(base * 1000) / 1000;
 }
@@ -90,10 +79,9 @@ export function computeCapability(
  * Order: quality desc → cost asc → headroom desc → position asc → model id asc.
  */
 export function compareCandidates(a: Candidate, b: Candidate): number {
-  if (b.quality !== a.quality) return b.quality - a.quality;
-  if (a.projectedCost !== b.projectedCost) return a.projectedCost - b.projectedCost;
-  if (b.quotaHeadroom !== a.quotaHeadroom) return b.quotaHeadroom - a.quotaHeadroom;
-  if (a.entry.position !== b.entry.position) return a.entry.position - b.entry.position;
+  const order = b.quality - a.quality || a.projectedCost - b.projectedCost ||
+    b.quotaHeadroom - a.quotaHeadroom || a.entry.position - b.entry.position;
+  if (order) return order;
   return a.model < b.model ? -1 : a.model > b.model ? 1 : 0;
 }
 

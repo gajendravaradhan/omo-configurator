@@ -17,8 +17,7 @@ const require = createRequire(import.meta.url);
  *  categories emit `models` (non-deprecated). VERIFIED by schema inspection 2026-08-05/07: agent entries
  *  allow model/fallback_models/... with additionalProperties:false; category entries allow model/models/fallback_models. */
 export const EMIT_SHAPE = {
-  agents: "fallback_models" as const,
-  categories: "models" as const,
+  agents: "fallback_models" as const, categories: "models" as const,
 } as const;
 
 /** P8: omo version this emit-shape decision was probed against. Startup mismatch → exit 3. */
@@ -60,9 +59,8 @@ type AnyNode = Record<string, unknown> & { type: string };
 function keyName(k: unknown): string | null {
   if (!k || typeof k !== "object") return null;
   const key = k as { type: string; name?: string; value?: unknown };
-  if (key.type === "Identifier" && typeof key.name === "string") return key.name;
-  if (key.type === "Literal" && typeof key.value === "string") return key.value;
-  return null;
+  return key.type === "Identifier" && typeof key.name === "string" ? key.name :
+    key.type === "Literal" && typeof key.value === "string" ? key.value : null;
 }
 
 /** Deep-search the AST for the VariableDeclarator initializer of a top-level const. */
@@ -76,10 +74,7 @@ function findVarInit(ast: AnyNode, name: string): AnyNode | null {
     }
     for (const v of Object.values(n)) {
       if (Array.isArray(v)) {
-        for (const c of v) {
-          const r = visit(c);
-          if (r) return r;
-        }
+        for (const c of v) { const r = visit(c); if (r) return r; }
       } else if (v && typeof v === "object") {
         const r = visit(v);
         if (r) return r;
@@ -113,35 +108,18 @@ function materialize(node: AnyNode | null): unknown {
 }
 
 interface RawChainEntry {
-  providers?: string[];
-  model?: string;
-  variant?: string;
+  providers?: string[]; model?: string; variant?: string;
 }
 
 interface RawSlot {
-  fallbackChain?: RawChainEntry[];
-  requiresAnyModel?: boolean;
-  requiresProvider?: string[];
+  fallbackChain?: RawChainEntry[]; requiresAnyModel?: boolean; requiresProvider?: string[];
 }
 
 function buildChains(raw: Record<string, RawSlot>, kind: SlotKind): SlotChain[] {
-  const chains: SlotChain[] = [];
-  for (const [name, slot] of Object.entries(raw)) {
-    const fallbackChain = (slot.fallbackChain ?? []).map((e, i) => ({
-      providers: e.providers ?? [],
-      model: e.model ?? "",
-      variant: e.variant,
-      position: i,
-    }));
-    chains.push({
-      kind,
-      name,
-      fallbackChain,
-      requiresAnyModel: slot.requiresAnyModel,
-      requiresProvider: slot.requiresProvider,
-    });
-  }
-  return chains;
+  return Object.entries(raw).map(([name, slot]) => {
+    const fallbackChain = (slot.fallbackChain ?? []).map((e, i) => ({ providers: e.providers ?? [], model: e.model ?? "", variant: e.variant, position: i }));
+    return { kind, name, fallbackChain, requiresAnyModel: slot.requiresAnyModel, requiresProvider: slot.requiresProvider };
+  });
 }
 
 /** Extract all 19 runtime slot chains (11 agents + 8 categories) from the installed omo dist. */
@@ -150,23 +128,14 @@ export function extractChains(): SlotChain[] {
   const ast = parse(src, { ecmaVersion: "latest", sourceType: "module" }) as unknown as AnyNode;
   const agentInit = findVarInit(ast, "AGENT_MODEL_REQUIREMENTS");
   const catInit = findVarInit(ast, "CATEGORY_MODEL_REQUIREMENTS");
-  const agents = (materialize(agentInit) ?? {}) as Record<string, RawSlot>;
-  const cats = (materialize(catInit) ?? {}) as Record<string, RawSlot>;
+  const agents = (materialize(agentInit) ?? {}) as Record<string, RawSlot>, cats = (materialize(catInit) ?? {}) as Record<string, RawSlot>;
   return [...buildChains(agents, "agent"), ...buildChains(cats, "category")];
 }
 
 // ---- W0 fixture loader (kept for tests/fixtures) ------------------------------
 
-export function loadFixtureChains(raw: {
-  agents?: Record<string, { fallbackChain: Array<{ providers: string[]; model: string; variant?: string }>; requiresAnyModel?: boolean; requiresProvider?: string[] }>;
-  categories?: Record<string, { fallbackChain: Array<{ providers: string[]; model: string; variant?: string }> }>;
-}): SlotChain[] {
-  const chains: SlotChain[] = [];
-  for (const [name, c] of Object.entries(raw.agents ?? {})) {
-    chains.push({ kind: "agent", name, fallbackChain: c.fallbackChain.map((e, i) => ({ ...e, position: i })), requiresAnyModel: c.requiresAnyModel, requiresProvider: c.requiresProvider });
-  }
-  for (const [name, c] of Object.entries(raw.categories ?? {})) {
-    chains.push({ kind: "category", name, fallbackChain: c.fallbackChain.map((e, i) => ({ ...e, position: i })) });
-  }
-  return chains;
+export function loadFixtureChains(raw: { agents?: Record<string, { fallbackChain: Array<{ providers: string[]; model: string; variant?: string }>; requiresAnyModel?: boolean; requiresProvider?: string[] }>; categories?: Record<string, { fallbackChain: Array<{ providers: string[]; model: string; variant?: string }> }> }): SlotChain[] {
+  const agents = Object.entries(raw.agents ?? {}).map(([name, c]) => ({ kind: "agent" as const, name, fallbackChain: c.fallbackChain.map((e, i) => ({ ...e, position: i })), requiresAnyModel: c.requiresAnyModel, requiresProvider: c.requiresProvider }));
+  const categories = Object.entries(raw.categories ?? {}).map(([name, c]) => ({ kind: "category" as const, name, fallbackChain: c.fallbackChain.map((e, i) => ({ ...e, position: i })) }));
+  return [...agents, ...categories];
 }

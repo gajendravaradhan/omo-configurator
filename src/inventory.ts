@@ -12,8 +12,7 @@ const TRUST_TAXONOMY: ReadonlySet<string> = new Set(["remote_api", "local_estima
 const FORBIDDEN_TOP_KEYS = ["reserve_policy", "promo", "anthropic_flat", "subscription_flat"];
 
 export interface Inventory {
-  version: number;
-  providers: Record<string, ProviderCapacity>;
+  version: number; providers: Record<string, ProviderCapacity>;
 }
 
 /** Parse inventory.yaml text into an Inventory; throws PlutusError(VALIDATION) on shape violations. */
@@ -29,9 +28,7 @@ export function parseInventory(raw: string, source = "inventory"): Inventory {
   }
   const d = doc as Record<string, unknown>;
 
-  for (const key of FORBIDDEN_TOP_KEYS) {
-    if (key in d) throw new PlutusError(`Inventory ${source} must not contain \`${key}\` (bundle §7 deletion)`, EXIT.VALIDATION);
-  }
+  for (const key of FORBIDDEN_TOP_KEYS) if (key in d) throw new PlutusError(`Inventory ${source} must not contain \`${key}\` (bundle §7 deletion)`, EXIT.VALIDATION);
 
   const version = typeof d.version === "number" ? d.version : 1;
   const providersRaw = d.providers;
@@ -41,36 +38,18 @@ export function parseInventory(raw: string, source = "inventory"): Inventory {
 
   const providers: Record<string, ProviderCapacity> = {};
   for (const [pid, p] of Object.entries(providersRaw as Record<string, unknown>)) {
-    if (typeof p !== "object" || p === null || Array.isArray(p)) {
-      throw new PlutusError(`Provider \`${pid}\` in ${source} must be a mapping`, EXIT.VALIDATION);
-    }
+    if (typeof p !== "object" || p === null || Array.isArray(p)) throw new PlutusError(`Provider \`${pid}\` in ${source} must be a mapping`, EXIT.VALIDATION);
     const pp = p as Record<string, unknown>;
     // Bundle §7 deletions hold at EVERY nesting level — not just the document top level.
     // The anthropic provider was deleted for claiming subscription-flat model access; the
     // prohibition applies inside provider blocks too.
-    for (const key of FORBIDDEN_TOP_KEYS) {
-      if (key in pp) {
-        throw new PlutusError(`Provider \`${pid}\` must not contain \`${key}\` (bundle §7 deletion)`, EXIT.VALIDATION);
-      }
-    }
+    for (const key of FORBIDDEN_TOP_KEYS) if (key in pp) throw new PlutusError(`Provider \`${pid}\` must not contain \`${key}\` (bundle §7 deletion)`, EXIT.VALIDATION);
     const trust = pp.trust;
-    if (typeof trust !== "string" || !TRUST_TAXONOMY.has(trust)) {
-      throw new PlutusError(
-        `Provider \`${pid}\` has invalid trust \`${String(trust)}\` — must be one of ${[...TRUST_TAXONOMY].join("|")} (bundle §4)`,
-        EXIT.VALIDATION,
-      );
-    }
+    if (typeof trust !== "string" || !TRUST_TAXONOMY.has(trust)) throw new PlutusError(`Provider \`${pid}\` has invalid trust \`${String(trust)}\` — must be one of ${[...TRUST_TAXONOMY].join("|")} (bundle §4)`, EXIT.VALIDATION);
     const cap = pp.cap === undefined ? null : pp.cap;
-    if (cap !== null && (typeof cap !== "number" || Number.isNaN(cap) || cap < 0 || cap > 1)) {
-      throw new PlutusError(`Provider \`${pid}\` cap must be a number in [0,1] or null`, EXIT.VALIDATION);
-    }
+    if (cap !== null && (typeof cap !== "number" || Number.isNaN(cap) || cap < 0 || cap > 1)) throw new PlutusError(`Provider \`${pid}\` cap must be a number in [0,1] or null`, EXIT.VALIDATION);
     const windowResets = typeof pp.window_resets === "string" ? pp.window_resets : null;
-    providers[pid] = {
-      provider: pid,
-      cap: cap as number | null,
-      windowResets,
-      trust: trust as TrustSource,
-    };
+    providers[pid] = { provider: pid, cap: cap as number | null, windowResets, trust: trust as TrustSource };
   }
   return { version, providers };
 }

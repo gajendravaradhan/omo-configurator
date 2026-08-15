@@ -8,16 +8,12 @@ import { PlutusError } from "../errors.ts";
 import { EXIT } from "../types.ts";
 
 export interface RollbackArgs {
-  list: boolean;
-  to?: string;
-  outputPath: string;
+  list: boolean; to?: string; outputPath: string;
 }
 
 /** Backups for the target, sorted ascending by timestamp: <target>.bak.<ts>. */
 export function listBackups(outputPath: string): string[] {
-  const dir = dirname(outputPath);
-  if (!existsSync(dir)) return [];
-  const prefix = `${basename(outputPath)}.bak.`;
+  const dir = dirname(outputPath); if (!existsSync(dir)) return []; const prefix = `${basename(outputPath)}.bak.`;
   return readdirSync(dir)
     .filter((f) => f.startsWith(prefix))
     .sort()
@@ -29,10 +25,7 @@ export async function rollback(args: RollbackArgs): Promise<void> {
   const backups = listBackups(args.outputPath);
 
   if (args.list) {
-    if (backups.length === 0) {
-      console.log("[rollback] no backups found");
-      return;
-    }
+    if (!backups.length) { console.log("[rollback] no backups found"); return; }
     console.log(`[rollback] ${backups.length} backup(s) for ${args.outputPath}:`);
     for (const b of backups) console.log(`  ${basename(b)}`);
     return;
@@ -48,21 +41,10 @@ export async function rollback(args: RollbackArgs): Promise<void> {
   } else {
     target = backups.find((b) => basename(b).includes(`.bak.${args.to}`)) ?? null;
   }
-  if (!target) {
-    throw new PlutusError(
-      `no backup matches "${args.to}" for ${args.outputPath} (found ${backups.length} backup(s))`,
-      EXIT.RUNTIME,
-    );
-  }
+  if (!target) throw new PlutusError(`no backup matches "${args.to}" for ${args.outputPath} (found ${backups.length} backup(s))`, EXIT.RUNTIME);
 
-  const restored = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
-  const v = validateConfig(restored);
-  if (!v.valid) {
-    throw new PlutusError(
-      `refusing to restore ${basename(target)}: config fails LOCAL schema validation (exit 2): ${v.errors.join("; ")}`,
-      EXIT.VALIDATION,
-    );
-  }
+  const restored = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>; const v = validateConfig(restored);
+  if (!v.valid) throw new PlutusError(`refusing to restore ${basename(target)}: config fails LOCAL schema validation (exit 2): ${v.errors.join("; ")}`, EXIT.VALIDATION);
 
   // Atomic restore (tmp+rename); the invalid case above never reaches the target.
   const tmp = `${args.outputPath}.tmp.${process.pid}`;

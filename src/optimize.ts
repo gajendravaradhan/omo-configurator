@@ -17,11 +17,7 @@ import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
 export interface OptimizeArgs {
-  inventoryPath: string;
-  mode: "absolute-best" | "adaptive";
-  outputPath: string;
-  dbPath: string;
-  merge: boolean;
+  inventoryPath: string; mode: "absolute-best" | "adaptive"; outputPath: string; dbPath: string; merge: boolean;
 }
 
 export async function optimize(args: OptimizeArgs): Promise<void> {
@@ -34,27 +30,18 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
     );
   }
 
-  const inventory = loadInventory(args.inventoryPath);
-  const caps = capMap(inventory);
+  const inventory = loadInventory(args.inventoryPath); const caps = capMap(inventory);
 
   // P8 startup check: emit-shape decision was made against a probed omo version.
-  const installed = installedOmoVersion();
-  assertOmoVersion(installed);
-  const chainSha = pinnedChainSha();
+  const installed = installedOmoVersion(); assertOmoVersion(installed); const chainSha = pinnedChainSha();
 
-  const chains = extractChains();
-  const availability = loadAvailability(inventory);
-  const tiers = loadTiers();
+  const chains = extractChains(); const availability = loadAvailability(inventory); const tiers = loadTiers();
   // W4.2: pinned slots from the sidecar are skipped by the solver and never touched by the merge.
-  const pinned = loadPinnedSlots();
-  const solve = solveChains({ chains, availability, caps, tiers, skipPinned: pinned });
-  const allUntrusted = solve.allUntrusted;
+  const pinned = loadPinnedSlots(); const solve = solveChains({ chains, availability, caps, tiers, skipPinned: pinned }); const allUntrusted = solve.allUntrusted;
 
   // P8: emit-shape decision note — printed once per run; agent fallback_models is schema-forced and
   // config migrate (omo v4.19.4, VERIFIED 2026-08-07) emits NO deprecation warning for it.
-  console.log(
-    `[plutus] emit-shape: agents->fallback_models (schema-forced; omo v${PROBED_OMO_VERSION} config migrate accepts, no deprecation warning emitted)`,
-  );
+  console.log(`[plutus] emit-shape: agents->fallback_models (schema-forced; omo v${PROBED_OMO_VERSION} config migrate accepts, no deprecation warning emitted)`);
 
   // Doctor soft-check (v1: soft — warn and report; schema validation is the primary gate).
   const assigned = new Set(solve.assignments.map((a) => a.slot));
@@ -63,9 +50,7 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   for (const slot of unresolved) {
     console.warn(`[doctor:soft] slot ${slot} has NO resolvable candidate — left unassigned (v1: warning only)`);
   }
-  if (pinnedSlots.length > 0) {
-    console.log(`[plutus] pinned (skipped): ${pinnedSlots.join(", ")}`);
-  }
+  if (pinnedSlots.length) console.log(`[plutus] pinned (skipped): ${pinnedSlots.join(", ")}`);
 
   const emit = emitConfig(solve.assignments, args.outputPath, { merge: args.merge });
 
@@ -79,23 +64,10 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   // D6 (SPIKE-02 RESOLVED): read per-agent token history read-only — the --db-path flag
   // was plumbed since W0 but never consumed; now it feeds the report's Token history section.
   const tokenHistory = readTokenHistory(args.dbPath);
-  if (!tokenHistory.available) {
-    console.log(`[plutus] token history: not read (no opencode.db at ${tokenHistory.dbPath}) — consumption estimates only`);
-  } else {
-    console.log(`[plutus] token history: read ${tokenHistory.rows.length} agent×model rows from ${tokenHistory.dbPath} (read-only)`);
-  }
+  if (!tokenHistory.available) console.log(`[plutus] token history: not read (no opencode.db at ${tokenHistory.dbPath}) — consumption estimates only`);
+  else console.log(`[plutus] token history: read ${tokenHistory.rows.length} agent×model rows from ${tokenHistory.dbPath} (read-only)`);
 
-  const reportPath = writeReport(solve, dirname(args.outputPath), {
-    schemaId: schemaInfo().id,
-    chainSha,
-    omoVersion: installed,
-    mode: args.mode,
-    tiers,
-    trustLevels,
-    doctor,
-    tokenHistory,
-    inventoryNames: Object.keys(inventory.providers),
-  });
+  const reportPath = writeReport(solve, dirname(args.outputPath), { schemaId: schemaInfo().id, chainSha, omoVersion: installed, mode: args.mode, tiers, trustLevels, doctor, tokenHistory, inventoryNames: Object.keys(inventory.providers) });
 
   if (allUntrusted) console.warn(`[plutus] ${ALL_UNTRUSTED_BANNER}`);
   console.log(`[plutus] wrote ${emit.configPath}`);

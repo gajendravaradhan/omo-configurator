@@ -9,22 +9,13 @@ import { resolveOpencodeDbPath } from "./config.ts";
 
 /** One (agent, model) row of consumption, aggregated from assistant messages. */
 export interface AgentModelUsage {
-  agent: string;
-  model: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheRead: number;
-  cacheWrite: number;
-  totalTokens: number;
-  cost: number;
+  agent: string; model: string; calls: number; inputTokens: number; outputTokens: number;
+  reasoningTokens: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: number;
 }
 
 /** Result of a token-history read. `available=false` when the db is missing/unreadable. */
 export interface TokenHistoryResult {
-  available: boolean;
-  dbPath: string;
+  available: boolean; dbPath: string;
   /** Per (agent, model) — the SPIKE-02 attribution surface. Empty when !available. */
   rows: AgentModelUsage[];
 }
@@ -42,49 +33,25 @@ export function readTokenHistory(dbPath?: string): TokenHistoryResult {
   let db: Database;
   try {
     db = new Database(path, { readonly: true });
-    db.exec("PRAGMA query_only = ON;");
-    db.exec("PRAGMA busy_timeout = 5000;");
+     db.exec("PRAGMA query_only = ON;"); db.exec("PRAGMA busy_timeout = 5000;");
   } catch {
     return { available: false, dbPath: path, rows: [] };
   }
 
   try {
-    const rows = db
-      .query(
-        `SELECT
-           json_extract(data, '$.agent') AS agent,
-           json_extract(data, '$.modelID') AS model,
-           COUNT(*) AS calls,
-           COALESCE(SUM(json_extract(data, '$.tokens.input')), 0) AS input_tokens,
-           COALESCE(SUM(json_extract(data, '$.tokens.output')), 0) AS output_tokens,
-           COALESCE(SUM(json_extract(data, '$.tokens.reasoning')), 0) AS reasoning_tokens,
-           COALESCE(SUM(json_extract(data, '$.tokens.cache.read')), 0) AS cache_read,
-           COALESCE(SUM(json_extract(data, '$.tokens.cache.write')), 0) AS cache_write,
-           COALESCE(SUM(json_extract(data, '$.tokens.total')), 0) AS total_tokens,
-           COALESCE(SUM(json_extract(data, '$.cost')), 0) AS cost
-         FROM message
-         WHERE json_extract(data, '$.role') = 'assistant'
-           AND json_extract(data, '$.tokens.total') IS NOT NULL
-         GROUP BY agent, model
-         ORDER BY total_tokens DESC`,
-      )
-      .all() as Array<{
-      agent: string | null;
-      model: string | null;
-      calls: number;
-      input_tokens: number;
-      output_tokens: number;
-      reasoning_tokens: number;
-      cache_read: number;
-      cache_write: number;
-      total_tokens: number;
-      cost: number;
-    }>;
+     const rows = db.query(
+        `SELECT json_extract(data, '$.agent') AS agent, json_extract(data, '$.modelID') AS model, COUNT(*) AS calls,
+         COALESCE(SUM(json_extract(data, '$.tokens.input')), 0) AS input_tokens, COALESCE(SUM(json_extract(data, '$.tokens.output')), 0) AS output_tokens,
+         COALESCE(SUM(json_extract(data, '$.tokens.reasoning')), 0) AS reasoning_tokens, COALESCE(SUM(json_extract(data, '$.tokens.cache.read')), 0) AS cache_read,
+         COALESCE(SUM(json_extract(data, '$.tokens.cache.write')), 0) AS cache_write, COALESCE(SUM(json_extract(data, '$.tokens.total')), 0) AS total_tokens,
+         COALESCE(SUM(json_extract(data, '$.cost')), 0) AS cost
+         FROM message WHERE json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.tokens.total') IS NOT NULL
+         GROUP BY agent, model ORDER BY total_tokens DESC`,
+       ).all() as Array<{ agent: string | null; model: string | null; calls: number; input_tokens: number;
+       output_tokens: number; reasoning_tokens: number; cache_read: number; cache_write: number;
+       total_tokens: number; cost: number }>;
 
-    return {
-      available: true,
-      dbPath: path,
-      rows: rows.map((r) => ({
+     return { available: true, dbPath: path, rows: rows.map((r) => ({
         agent: r.agent ?? "(unknown)",
         model: r.model ?? "(unknown)",
         calls: r.calls,
@@ -95,8 +62,7 @@ export function readTokenHistory(dbPath?: string): TokenHistoryResult {
         cacheWrite: r.cache_write,
         totalTokens: r.total_tokens,
         cost: r.cost,
-      })),
-    };
+       })) };
   } catch {
     return { available: false, dbPath: path, rows: [] };
   } finally {

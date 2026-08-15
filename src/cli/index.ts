@@ -24,7 +24,7 @@ export const optimizeCommand = defineCommand({
     "no-merge": { type: "boolean", default: false, description: "Do not deep-merge into existing config (emit fresh)" },
   },
   run: async (ctx) => {
-    return await optimize({
+    return optimize({
       inventoryPath: resolveInventoryPath(ctx.args.config),
       mode: ctx.args.mode as "absolute-best" | "adaptive",
       outputPath: resolveOmoConfigPath(ctx.args.output),
@@ -98,22 +98,14 @@ async function printUsage(argv: string[]): Promise<void> {
 
 // Exported for programmatic test invocation; returns the exit code the process should use.
 export async function runCli(argv: string[]): Promise<ExitCode> {
-  if (argv.includes("--help") || argv.includes("-h")) {
-    await printUsage(argv);
-    return EXIT.OK;
-  }
+  if (argv.includes("--help") || argv.includes("-h")) { await printUsage(argv); return EXIT.OK; }
   try {
-    await runCommand(mainDef as any, { rawArgs: argv });
-    return EXIT.OK;
+    await runCommand(mainDef as any, { rawArgs: argv }); return EXIT.OK;
   } catch (e: unknown) {
     const err = e as Error & { exitCode?: number };
     const code = (err?.exitCode ?? EXIT.RUNTIME) as ExitCode;
-    if (err?.message) console.error(err.message);
-    return code;
+    if (err?.message) console.error(err.message); return code;
   }
 }
 
-if (import.meta.main) {
-  const code = await runCli(process.argv.slice(2));
-  if (code !== EXIT.OK) process.exit(code);
-}
+if (import.meta.main) { const code = await runCli(process.argv.slice(2)); if (code !== EXIT.OK) process.exit(code); }

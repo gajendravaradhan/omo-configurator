@@ -21,10 +21,7 @@ import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
 export interface QuotaSnapshot {
-  /** provider id → discovered capacity. */
-  providers: Record<string, { cap: number | null; window_resets?: string | null }>;
-  /** raw tool output, preserved for the report — never dropped. */
-  raw: string;
+  providers: Record<string, { cap: number | null; window_resets?: string | null }>; raw: string;
 }
 
 interface RawQuotaDoc {
@@ -33,8 +30,7 @@ interface RawQuotaDoc {
 
 function toCap(v: unknown): number | null | undefined {
   if (v === null || v === undefined) return null;
-  if (typeof v === "number" && !Number.isNaN(v)) return v;
-  return undefined;
+  return typeof v === "number" && !Number.isNaN(v) ? v : undefined;
 }
 
 /**
@@ -56,9 +52,7 @@ export function parseQuotaOutput(raw: string): QuotaSnapshot {
       EXIT.RUNTIME,
     );
   }
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    throw new PlutusError(`quota tool output has an unmappable shape. Raw output:\n${raw}`, EXIT.RUNTIME);
-  }
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) throw new PlutusError(`quota tool output has an unmappable shape. Raw output:\n${raw}`, EXIT.RUNTIME);
   const providersRaw = (doc as RawQuotaDoc).providers;
   if (typeof providersRaw !== "object" || providersRaw === null || Array.isArray(providersRaw)) {
     throw new PlutusError(
@@ -68,23 +62,13 @@ export function parseQuotaOutput(raw: string): QuotaSnapshot {
   }
   const providers: QuotaSnapshot["providers"] = {};
   for (const [pid, p] of Object.entries(providersRaw)) {
-    if (typeof p !== "object" || p === null || Array.isArray(p)) {
-      throw new PlutusError(`quota output for provider \`${pid}\` is not a mapping. Raw output:\n${raw}`, EXIT.RUNTIME);
-    }
+    if (typeof p !== "object" || p === null || Array.isArray(p)) throw new PlutusError(`quota output for provider \`${pid}\` is not a mapping. Raw output:\n${raw}`, EXIT.RUNTIME);
     // Ground-truth: "unavailable" = no verified capacity → null (untrusted). Available statuses (or
     // absent status) must carry a numeric quota we can map — otherwise refuse loudly.
     const unavailable = p.status === "unavailable";
     const rawCap = unavailable ? null : toCap(p.cap) ?? toCap(p.quota);
-    if (!unavailable && rawCap === undefined) {
-      throw new PlutusError(
-        `quota output for provider \`${pid}\` has no numeric cap/quota. Raw output:\n${raw}`,
-        EXIT.RUNTIME,
-      );
-    }
-    providers[pid] = {
-      cap: rawCap ?? null,
-      window_resets: typeof p.window_resets === "string" ? p.window_resets : null,
-    };
+    if (!unavailable && rawCap === undefined) throw new PlutusError(`quota output for provider \`${pid}\` has no numeric cap/quota. Raw output:\n${raw}`, EXIT.RUNTIME);
+    providers[pid] = { cap: rawCap ?? null, window_resets: typeof p.window_resets === "string" ? p.window_resets : null };
   }
   return { providers, raw };
 }
@@ -98,12 +82,7 @@ export function mergeQuota(inv: Inventory, quota: QuotaSnapshot): Inventory {
   const providers = { ...inv.providers };
   for (const [pid, q] of Object.entries(quota.providers)) {
     const existing = providers[pid];
-    providers[pid] = {
-      provider: pid,
-      cap: q.cap,
-      windowResets: q.window_resets ?? existing?.windowResets ?? null,
-      trust: existing?.trust ?? "user_declared",
-    };
+    providers[pid] = { provider: pid, cap: q.cap, windowResets: q.window_resets ?? existing?.windowResets ?? null, trust: existing?.trust ?? "user_declared" };
   }
   return { version: inv.version, providers };
 }
@@ -112,10 +91,7 @@ export function mergeQuota(inv: Inventory, quota: QuotaSnapshot): Inventory {
 export function serializeInventory(inv: Inventory): string {
   const providers: Record<string, unknown> = {};
   for (const [pid, p] of Object.entries(inv.providers)) {
-    const block: Record<string, unknown> = { cap: p.cap };
-    if (p.windowResets) block.window_resets = p.windowResets;
-    block.trust = p.trust;
-    providers[pid] = block;
+    providers[pid] = { cap: p.cap, ...(p.windowResets ? { window_resets: p.windowResets } : {}), trust: p.trust };
   }
   return stringify({ version: inv.version, providers });
 }
@@ -130,35 +106,19 @@ function ts(): string {
  * content is invalid (target untouched in both cases).
  */
 export function writeInventoryAtomic(invPath: string, content: string, lockPath: string = lockfilePath()): { backupPath: string | null } {
-  // 1. Validate BEFORE touching the target (validate-before-replace).
   parseInventory(content, invPath);
-
-  // 2. Advisory lock: exclusive create; bounded retry for a moment, then fail loudly.
   mkdirSync(dirname(lockPath), { recursive: true });
-  let acquired = false;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       writeFileSync(lockPath, String(process.pid), { flag: "wx" });
-      acquired = true;
       break;
-    } catch {
-      if (attempt === 4) {
-        throw new PlutusError(`another plutus process holds the inventory lock (${lockPath})`, EXIT.RUNTIME);
-      }
-      Bun.sleepSync(100);
-    }
+    } catch { if (attempt === 4) throw new PlutusError(`another plutus process holds the inventory lock (${lockPath})`, EXIT.RUNTIME); Bun.sleepSync(100); }
   }
   try {
-    // 3. Backup the pre-existing inventory.
     let backupPath: string | null = null;
-    if (existsSync(invPath)) {
-      backupPath = `${invPath}.bak.${ts()}`;
-      copyFileSync(invPath, backupPath);
-    }
-    // 4. tmp+rename atomic replace.
+    if (existsSync(invPath)) { backupPath = `${invPath}.bak.${ts()}`; copyFileSync(invPath, backupPath); }
     const tmp = `${invPath}.tmp.${process.pid}`;
-    writeFileSync(tmp, content, "utf8");
-    renameSync(tmp, invPath);
+    writeFileSync(tmp, content, "utf8"); renameSync(tmp, invPath);
     return { backupPath };
   } finally {
     rmSync(lockPath, { force: true });
@@ -166,8 +126,7 @@ export function writeInventoryAtomic(invPath: string, content: string, lockPath:
 }
 
 export interface DiscoverArgs {
-  inventoryPath: string;
-  write: boolean;
+  inventoryPath: string; write: boolean;
 }
 
 /** Spawn `bun x @slkiser/opencode-quota show --json`; returns stdout. Clear install error on failure. */
@@ -184,16 +143,8 @@ export async function fetchQuota(): Promise<string> {
       EXIT.RUNTIME,
     );
   }
-  const exit = await proc.exited;
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
-  if (exit !== 0) {
-    throw new PlutusError(
-      `\`bun x @slkiser/opencode-quota show\` exited ${exit} — refusing to continue with zero-capacity data.\n` +
-        `stderr: ${stderr.slice(0, 2000)}`,
-      EXIT.RUNTIME,
-    );
-  }
+  const [exit, stdout, stderr] = await Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  if (exit !== 0) throw new PlutusError(`\`bun x @slkiser/opencode-quota show\` exited ${exit} — refusing to continue with zero-capacity data.\nstderr: ${stderr.slice(0, 2000)}`, EXIT.RUNTIME);
   return stdout;
 }
 
@@ -203,30 +154,21 @@ export async function fetchQuota(): Promise<string> {
  */
 export async function discover(args: DiscoverArgs): Promise<void> {
   const inv = parseInventory(readFileSync(args.inventoryPath, "utf8"), args.inventoryPath);
-
   console.log(`[discover] reading quota via \`bun x @slkiser/opencode-quota show --json\` …`);
   const raw = await fetchQuota();
-  const quota = parseQuotaOutput(raw);
-  const merged = mergeQuota(inv, quota);
+  const quota = parseQuotaOutput(raw); const merged = mergeQuota(inv, quota);
 
   console.log(`[discover] quota snapshot (${Object.keys(quota.providers).length} providers):`);
-  for (const [pid, p] of Object.entries(quota.providers)) {
-    console.log(`  ${pid}: cap=${p.cap ?? "null"}${p.window_resets ? ` window_resets=${p.window_resets}` : ""}`);
-  }
-
+  for (const [pid, p] of Object.entries(quota.providers)) console.log(`  ${pid}: cap=${p.cap ?? "null"}${p.window_resets ? ` window_resets=${p.window_resets}` : ""}`);
   const modelsPath = modelsCachePath();
-  const modelCount = existsSync(modelsPath) ? Object.keys(JSON.parse(readFileSync(modelsPath, "utf8"))).length : 0;
-  console.log(`[discover] models availability: ${existsSync(modelsPath) ? modelsPath : "(missing — " + modelsPath + ")"} (${modelCount} providers)`);
-  if (!existsSync(modelsPath)) {
-    console.warn("[discover] warning: models.json cache missing — availability is inventory-only");
-  }
-
+  const modelsExist = existsSync(modelsPath);
+  const modelCount = modelsExist ? Object.keys(JSON.parse(readFileSync(modelsPath, "utf8"))).length : 0;
+  console.log(`[discover] models availability: ${modelsExist ? modelsPath : "(missing — " + modelsPath + ")"} (${modelCount} providers)`);
+  if (!modelsExist) console.warn("[discover] warning: models.json cache missing — availability is inventory-only");
   if (args.write) {
     const content = serializeInventory(merged);
     const { backupPath } = writeInventoryAtomic(args.inventoryPath, content);
     console.log(`[discover] wrote ${args.inventoryPath} (merged ${Object.keys(quota.providers).length} providers)`);
     if (backupPath) console.log(`[discover] backup: ${backupPath}`);
-  } else {
-    console.log(`[discover] dry-run — pass --write to merge the snapshot into ${args.inventoryPath}`);
-  }
+  } else console.log(`[discover] dry-run — pass --write to merge the snapshot into ${args.inventoryPath}`);
 }

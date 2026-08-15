@@ -34,12 +34,10 @@ export const OMO_SCHEMA_URL = "https://raw.githubusercontent.com/code-yeongyu/oh
 const OWNED_KEYS = new Set(["model", "variant", "reasoning", "reasoningEffort", "models", "fallback_models"]);
 
 export interface EmitResult {
-  configPath: string;
-  backupPath: string | null;
+  configPath: string; backupPath: string | null;
 }
 
 export interface EmitOptions {
-  /** Deep-merge into the pre-existing target (bundle §1.8). Default true. */
   merge?: boolean;
 }
 
@@ -54,7 +52,6 @@ export function loadPinnedSlots(path: string = pinnedSidecarPath()): string[] {
     const doc = JSON.parse(readFileSync(path, "utf8")) as { slots?: unknown };
     if (Array.isArray(doc.slots)) return doc.slots.filter((s): s is string => typeof s === "string");
   } catch {
-    // Corrupt sidecar → treat as empty + loud warning (a broken pin must not silently pin nothing).
     console.warn(`[plutus] warning: pinned sidecar ${path} is corrupt — ignoring (no slots pinned)`);
   }
   return [];
@@ -62,9 +59,7 @@ export function loadPinnedSlots(path: string = pinnedSidecarPath()): string[] {
 
 /** Serialize one fallback entry the way the schema expects ({ model, variant? }). */
 function fallbackEntry(model: string, variant?: string): Record<string, unknown> {
-  const o: Record<string, unknown> = { model };
-  if (variant) o.variant = variant;
-  return o;
+  return variant ? { model, variant } : { model };
 }
 
 /**
@@ -73,33 +68,20 @@ function fallbackEntry(model: string, variant?: string): Record<string, unknown>
  */
 export function buildConfig(assignments: Assignment[], existing?: Record<string, unknown>): Record<string, unknown> {
   const config: Record<string, unknown> = { ...(existing ?? {}) };
-
   for (const a of assignments) {
     const section = a.kind === "agent" ? "agents" : "categories";
-    const slots = ((config[section] ?? {}) as Record<string, unknown>);
+    const slots = (config[section] ?? {}) as Record<string, unknown>;
     const prev = (slots[a.slot] ?? {}) as Record<string, unknown>;
-
-    // Replace owned keys: drop the optimizer-owned set, then write the new values.
-    const merged: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(prev)) if (!OWNED_KEYS.has(k)) merged[k] = v;
+    const merged: Record<string, unknown> = Object.fromEntries(Object.entries(prev).filter(([k]) => !OWNED_KEYS.has(k)));
     merged.model = a.primary.model;
     if (a.primary.variant) merged.variant = a.primary.variant;
     const fbKey = a.kind === "agent" ? "fallback_models" : "models";
     merged[fbKey] = a.fallbacks.slice(0, FALLBACK_CAP).map((c) => fallbackEntry(c.model, c.variant));
 
-    slots[a.slot] = merged;
-    config[section] = slots;
+    slots[a.slot] = merged; config[section] = slots;
   }
-
-  // Ensure sections exist even when empty (schema has additionalProperties:false — empty objects ok).
-  if (!config.agents) config.agents = {};
-  if (!config.categories) config.categories = {};
-
-  // Schema REQUIRES top-level git_master (verified against local schema 2026-08-07).
-  // Emit the schema's own default block so the emitted config passes the LOCAL validation gate.
-  if (!config.git_master) {
-    config.git_master = { commit_footer: true, include_co_authored_by: true, git_env_prefix: "GIT_MASTER=1" };
-  }
+  if (!config.agents) config.agents = {}; if (!config.categories) config.categories = {};
+  if (!config.git_master) config.git_master = { commit_footer: true, include_co_authored_by: true, git_env_prefix: "GIT_MASTER=1" };
   return config;
 }
 
@@ -109,9 +91,7 @@ export function buildConfig(assignments: Assignment[], existing?: Record<string,
  * pre-existing target and tmp+rename into place.
  */
 export function emitConfig(assignments: Assignment[], outputPath: string, opts: EmitOptions = {}): EmitResult {
-  const merge = opts.merge ?? true;
-  mkdirSync(dirname(outputPath), { recursive: true });
-
+  const merge = opts.merge ?? true; mkdirSync(dirname(outputPath), { recursive: true });
   let existing: Record<string, unknown> | undefined;
   if (merge && existsSync(outputPath)) {
     try {
@@ -125,19 +105,11 @@ export function emitConfig(assignments: Assignment[], outputPath: string, opts: 
     }
   }
 
-  const config = buildConfig(assignments, existing);
-  assertValidConfig(config, "emitted oh-my-opencode.json"); // PRIMARY gate — never write invalid config
-
+  const config = buildConfig(assignments, existing); assertValidConfig(config, "emitted oh-my-opencode.json");
   let backupPath: string | null = null;
-  if (existsSync(outputPath)) {
-    backupPath = `${outputPath}.bak.${ts()}`;
-    copyFileSync(outputPath, backupPath);
-  }
+  if (existsSync(outputPath)) { backupPath = `${outputPath}.bak.${ts()}`; copyFileSync(outputPath, backupPath); }
 
-  const tmp = `${outputPath}.tmp.${process.pid}`;
-  writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", "utf8");
-  renameSync(tmp, outputPath);
-
+  const tmp = `${outputPath}.tmp.${process.pid}`; writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", "utf8"); renameSync(tmp, outputPath);
   return { configPath: outputPath, backupPath };
 }
 
@@ -156,47 +128,22 @@ const OMO_TOP_LEVEL_KEEP = new Set(["codegraph", "[senpi]", "[codex]", "teams", 
 export function parseJsonc(raw: string): unknown {
   let out = "";
   let inString: "'" | '"' | null = null;
-  let escaped = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-  let pendingComma = false;
+  let escaped = false, inLineComment = false, inBlockComment = false, pendingComma = false;
   for (let i = 0; i < raw.length; i++) {
-    const c = raw[i]!;
-    const next = raw[i + 1];
-    if (inLineComment) {
-      if (c === "\n") { inLineComment = false; out += c; }
-      continue;
-    }
-    if (inBlockComment) {
-      if (c === "*" && next === "/") { inBlockComment = false; i++; }
-      continue;
-    }
+    const c = raw[i]!, next = raw[i + 1];
+    if (inLineComment) { if (c === "\n") { inLineComment = false; out += c; } continue; }
+    if (inBlockComment) { if (c === "*" && next === "/") { inBlockComment = false; i++; } continue; }
     if (inString) {
-      out += c;
-      if (escaped) { escaped = false; continue; }
-      if (c === "\\") { escaped = true; continue; }
-      if (c === inString) inString = null;
-      continue;
+      out += c; if (escaped) { escaped = false; continue; } if (c === "\\") { escaped = true; continue; }
+      if (c === inString) inString = null; continue;
     }
-    if (c === '"' || c === "'") {
-      if (pendingComma) { out += ","; pendingComma = false; }
-      inString = c; out += c; continue;
-    }
-    if (c === "/" && next === "/") { inLineComment = true; i++; continue; }
-    if (c === "/" && next === "*") { inBlockComment = true; i++; continue; }
+    if (c === '"' || c === "'") { if (pendingComma) { out += ","; pendingComma = false; } inString = c; out += c; continue; }
+    if (c === "/" && next === "/") { inLineComment = true; i++; continue; } if (c === "/" && next === "*") { inBlockComment = true; i++; continue; }
     // A comma immediately before a closing brace/bracket is a trailing comma — drop it.
     // Whitespace carries the pending comma (it must survive "a: 1, }" so the comma is
     // only flushed at the next significant token, and dropped if that token is a closer).
-    if (c === ",") { pendingComma = true; continue; }
-    if (c === "}" || c === "]") {
-      pendingComma = false; // comma was trailing — already dropped
-      out += c;
-      continue;
-    }
-    if (c === " " || c === "\t" || c === "\n" || c === "\r") {
-      out += c; // carry the pending comma across whitespace
-      continue;
-    }
+    if (c === ",") { pendingComma = true; continue; } if (c === "}" || c === "]") { pendingComma = false; out += c; continue; }
+    if (/\s/.test(c)) { out += c; continue; }
     if (pendingComma) { out += ","; pendingComma = false; }
     out += c;
   }
@@ -216,25 +163,19 @@ export function buildOmoConfig(assignments: Assignment[], existing?: Record<stri
   const container: Record<string, unknown> = {};
   if (existing && typeof existing === "object" && !Array.isArray(existing)) {
     for (const [k, v] of Object.entries(existing)) {
-      if (k === "$schema") continue; // we set the authoritative schema URL
-      if (k === "[opencode]") continue; // replaced below
-      if (OMO_TOP_LEVEL_KEEP.has(k)) container[k] = v;
+      if (k !== "$schema" && k !== "[opencode]" && OMO_TOP_LEVEL_KEEP.has(k)) container[k] = v;
     }
   }
   container.$schema = OMO_SCHEMA_URL;
-
   const prevOpencode = existing?.["[opencode]"] as Record<string, unknown> | undefined;
-  const inner = buildConfig(assignments, prevOpencode);
-  container["[opencode]"] = inner;
+  container["[opencode]"] = buildConfig(assignments, prevOpencode);
   return container;
 }
 
 /** Emit the omo.jsonc document atomically (validate inner [opencode] against the local schema FIRST,
  *  back up the existing target, tmp+rename). Returns { configPath, backupPath }. */
 export function emitOmoConfig(assignments: Assignment[], outputPath: string, opts: EmitOptions = {}): EmitResult {
-  const merge = opts.merge ?? true;
-  mkdirSync(dirname(outputPath), { recursive: true });
-
+  const merge = opts.merge ?? true; mkdirSync(dirname(outputPath), { recursive: true });
   let existing: Record<string, unknown> | undefined;
   if (merge && existsSync(outputPath)) {
     try {
@@ -258,32 +199,20 @@ export function emitOmoConfig(assignments: Assignment[], outputPath: string, opt
   const ownedAgents = assignments.filter((a) => a.kind === "agent").map((a) => a.slot);
   const ownedCategories = assignments.filter((a) => a.kind === "category").map((a) => a.slot);
   const ownedErrors = validateOpencodeOwned(inner, ownedAgents, ownedCategories);
-  if (ownedErrors.length > 0) {
-    throw new PlutusError(`Validation failed for optimizer-owned [opencode] slots:\n  - ${ownedErrors.join("\n  - ")}`, EXIT.VALIDATION);
-  }
-
+  if (ownedErrors.length) throw new PlutusError(`Validation failed for optimizer-owned [opencode] slots:\n  - ${ownedErrors.join("\n  - ")}`, EXIT.VALIDATION);
   let backupPath: string | null = null;
-  if (existsSync(outputPath)) {
-    backupPath = `${outputPath}.bak.${ts()}`;
-    copyFileSync(outputPath, backupPath);
-  }
+  if (existsSync(outputPath)) { backupPath = `${outputPath}.bak.${ts()}`; copyFileSync(outputPath, backupPath); }
 
-  const tmp = `${outputPath}.tmp.${process.pid}`;
-  writeFileSync(tmp, JSON.stringify(container, null, 2) + "\n", "utf8");
+  const tmp = `${outputPath}.tmp.${process.pid}`; writeFileSync(tmp, JSON.stringify(container, null, 2) + "\n", "utf8");
   try {
     renameSync(tmp, outputPath);
   } catch (e: unknown) {
     // EBUSY = the target is a single-file bind mount (e.g. /root/.omo/omo.jsonc in the NAS
     // container) — rename over a mount point is impossible. Fall back to in-place write,
     // which is exactly how OMO itself writes its config; the backup above still protects us.
-    if ((e as NodeJS.ErrnoException).code === "EBUSY") {
-      writeFileSync(outputPath, readFileSync(tmp, "utf8"), "utf8");
-      rmSync(tmp, { force: true });
-    } else {
-      rmSync(tmp, { force: true });
-      throw e;
-    }
+    if ((e as NodeJS.ErrnoException).code === "EBUSY") writeFileSync(outputPath, readFileSync(tmp, "utf8"), "utf8");
+    else { rmSync(tmp, { force: true }); throw e; }
+    rmSync(tmp, { force: true });
   }
-
   return { configPath: outputPath, backupPath };
 }

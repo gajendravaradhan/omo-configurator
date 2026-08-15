@@ -8,9 +8,7 @@
 // to run) is recorded for the report — it never blocks the optimize flow (v1).
 
 export interface DoctorCheckResult {
-  name: string;
-  status: string;
-  message: string;
+  name: string; status: string; message: string;
 }
 
 export interface DoctorSummary {
@@ -36,52 +34,27 @@ export async function runDoctor(): Promise<DoctorSummary> {
       stderr: "pipe",
     });
   } catch (e: unknown) {
-    return {
-      ran: false,
-      modelsCheck: null,
-      systemDefaultMarkerSeen: false,
-      notes: [`doctor could not be started: ${(e as Error).message}`],
-    };
+    return { ran: false, modelsCheck: null, systemDefaultMarkerSeen: false, notes: [`doctor could not be started: ${(e as Error).message}`] };
   }
-  const exit = await proc.exited;
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
+  const [exit, stdout, stderr] = await Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   // Exit code is NOT a gate in v1 — the Models check content is what matters.
 
   let doc: RawDoctor | null = null;
   try {
     doc = JSON.parse(stdout) as RawDoctor;
   } catch {
-    return {
-      ran: false,
-      modelsCheck: null,
-      systemDefaultMarkerSeen: false,
-      notes: [`doctor output was not JSON (exit ${exit}); stderr: ${stderr.slice(0, 500)}`],
-    };
+    return { ran: false, modelsCheck: null, systemDefaultMarkerSeen: false, notes: [`doctor output was not JSON (exit ${exit}); stderr: ${stderr.slice(0, 500)}`] };
   }
 
-  const results = (doc?.results ?? []).filter(
-    (r): r is { name: string; status: string; message: string } =>
-      typeof r.name === "string" && typeof r.status === "string" && typeof r.message === "string",
-  );
-  const modelsCheck = results.find((r) => /^models$/i.test(r.name)) ?? null;
-  const systemDefaultMarkerSeen = /system-default/i.test(stdout);
+  const results = (doc?.results ?? []).filter((r): r is { name: string; status: string; message: string } => typeof r.name === "string" && typeof r.status === "string" && typeof r.message === "string");
+  const modelsCheck = results.find((r) => /^models$/i.test(r.name)) ?? null; const systemDefaultMarkerSeen = /system-default/i.test(stdout);
 
   const notes: string[] = [];
-  if (modelsCheck) {
-    notes.push(`doctor Models check: ${modelsCheck.status} — ${modelsCheck.message}`);
-  } else {
-    notes.push("doctor output had no Models check");
-  }
-  notes.push(
-    systemDefaultMarkerSeen
-      ? "doctor reported a system-default marker — at least one slot has no explicit model (soft: warning only)"
-      : "doctor system-default marker: ABSENT (every slot carries an explicit model) — marker semantics VERIFIED 2026-08-07",
-  );
+  if (modelsCheck) notes.push(`doctor Models check: ${modelsCheck.status} — ${modelsCheck.message}`);
+  else notes.push("doctor output had no Models check");
+  notes.push(systemDefaultMarkerSeen ? "doctor reported a system-default marker — at least one slot has no explicit model (soft: warning only)" : "doctor system-default marker: ABSENT (every slot carries an explicit model) — marker semantics VERIFIED 2026-08-07");
   const failures = results.filter((r) => r.status === "fail");
-  if (failures.length > 0) {
-    notes.push(`doctor non-Models failures (soft, non-blocking): ${failures.map((f) => `${f.name}=${f.status}`).join(", ")}`);
-  }
+  if (failures.length) notes.push(`doctor non-Models failures (soft, non-blocking): ${failures.map((f) => `${f.name}=${f.status}`).join(", ")}`);
 
   return { ran: true, modelsCheck, systemDefaultMarkerSeen, notes };
 }

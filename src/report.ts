@@ -19,14 +19,8 @@ export const ALL_UNTRUSTED_BANNER =
   "No provider has verified capacity. Assignments are quality-optimal only; budget constraints are NOT enforced.";
 
 export interface ReportOpts {
-  schemaId?: string;
-  chainSha?: string;
-  omoVersion?: string;
-  mode?: string;
-  tiers?: Tiers;
-  trustLevels?: Record<string, TrustSource>;
-  doctor?: DoctorSummary;
-  tokenHistory?: TokenHistoryResult;
+  schemaId?: string; chainSha?: string; omoVersion?: string; mode?: string; tiers?: Tiers;
+  trustLevels?: Record<string, TrustSource>; doctor?: DoctorSummary; tokenHistory?: TokenHistoryResult;
 }
 
 /** The slot's binding constraint — why this candidate was chosen (quality score + capacity rule). */
@@ -47,80 +41,49 @@ export function renderReport(
   opts: ReportOpts = {},
 ): string {
   const lines: string[] = [];
-  lines.push("# plutus-report", "");
-  lines.push(`> ${V1_BOUNDARY_STATEMENT}`, "");
+  lines.push("# plutus-report", "", `> ${V1_BOUNDARY_STATEMENT}`, "");
 
-  if (solve.allUntrusted) {
-    lines.push(`**${ALL_UNTRUSTED_BANNER}**`, "");
-  }
+  if (solve.allUntrusted) lines.push(`**${ALL_UNTRUSTED_BANNER}**`, "");
 
-  lines.push("## Assignments", "");
-  lines.push("| slot | kind | primary model | provider | fit | capability | quality | cost | trusted | binding constraint |");
-  lines.push("|---|---|---|---|---|---|---|---|---|---|");
-  for (const a of solve.assignments) {
-    lines.push(
-      `| ${a.slot} | ${a.kind} | ${a.primary.model} | ${a.primary.provider} | ${a.primary.fit} | ${a.primary.capability} | ${a.primary.quality.toFixed(3)} | ${projectedCostText(a)} | ${a.primary.trusted} | ${bindingConstraint(a, solve.allUntrusted)} |`,
-    );
-  }
+  lines.push("## Assignments", "", "| slot | kind | primary model | provider | fit | capability | quality | cost | trusted | binding constraint |", "|---|---|---|---|---|---|---|---|---|---|---");
+  for (const a of solve.assignments) lines.push(`| ${a.slot} | ${a.kind} | ${a.primary.model} | ${a.primary.provider} | ${a.primary.fit} | ${a.primary.capability} | ${a.primary.quality.toFixed(3)} | ${projectedCostText(a)} | ${a.primary.trusted} | ${bindingConstraint(a, solve.allUntrusted)} |`);
   lines.push("");
 
   lines.push("## Rationale", "");
-  for (const a of solve.assignments) {
-    lines.push(`- **${a.slot}**: ${a.rationale} — binding: ${bindingConstraint(a, solve.allUntrusted)}`);
-  }
+  for (const a of solve.assignments) lines.push(`- **${a.slot}**: ${a.rationale} — binding: ${bindingConstraint(a, solve.allUntrusted)}`);
   lines.push("");
 
-  lines.push("## Assumptions & trust levels", "");
-  lines.push(`- Inventory providers: ${inventoryNames.length ? inventoryNames.join(", ") : "(none declared)"}`);
-  lines.push("- Trust taxonomy: remote_api | local_estimation | user_declared");
-  if (opts.trustLevels && Object.keys(opts.trustLevels).length > 0) {
-    for (const [pid, trust] of Object.entries(opts.trustLevels)) {
-      lines.push(`  - ${pid}: ${trust}`);
-    }
-  }
+  lines.push("## Assumptions & trust levels", "", `- Inventory providers: ${inventoryNames.length ? inventoryNames.join(", ") : "(none declared)"}`, "- Trust taxonomy: remote_api | local_estimation | user_declared");
+  if (opts.trustLevels && Object.keys(opts.trustLevels).length > 0)
+    for (const [pid, trust] of Object.entries(opts.trustLevels)) lines.push(`  - ${pid}: ${trust}`);
   lines.push("- Projected cost is a per-token input+output proxy (P5 tiebreak #1); real consumption is metered in the Token history section when opencode.db is present");
-  if (opts.tokenHistory && opts.tokenHistory.available) {
+  if (opts.tokenHistory?.available) {
     lines.push(`- Token history: read from ${opts.tokenHistory.dbPath} (read-only, SPIKE-02 RESOLVED 2026-08-07)`);
   } else {
     lines.push("- Token history: NOT read — no opencode.db found at the resolved path (consumption figures are estimates, not metered totals; use --db-path if the canonical db lives elsewhere)");
   }
-  if (opts.mode) lines.push(`- Mode: ${opts.mode}`);
-  if (opts.chainSha) lines.push(`- Pinned chain SHA: ${opts.chainSha}`);
-  if (opts.schemaId) lines.push(`- Schema $id: ${opts.schemaId}`);
+  if (opts.mode) lines.push(`- Mode: ${opts.mode}`); if (opts.chainSha) lines.push(`- Pinned chain SHA: ${opts.chainSha}`); if (opts.schemaId) lines.push(`- Schema $id: ${opts.schemaId}`);
   if (opts.omoVersion) {
-    lines.push(`- Omo version probed for emit-shape (P8): v${opts.omoVersion}; installed must match or \`plutus optimize\` exits 3`);
-    lines.push("- Emit-shape (P8): agents emit `fallback_models` (schema-forced — no `models` key for agents); categories emit `models` (non-deprecated)");
-    lines.push("- P8 deprecation-warning record: omo v4.19.4 `config migrate --dry-run --json` emits NO deprecation warning for agent `fallback_models` (VERIFIED 2026-08-07)");
+    lines.push(`- Omo version probed for emit-shape (P8): v${opts.omoVersion}; installed must match or \`plutus optimize\` exits 3`, "- Emit-shape (P8): agents emit `fallback_models` (schema-forced — no `models` key for agents); categories emit `models` (non-deprecated)", "- P8 deprecation-warning record: omo v4.19.4 `config migrate --dry-run --json` emits NO deprecation warning for agent `fallback_models` (VERIFIED 2026-08-07)");
   }
   if (opts.tiers) {
     const stale = staleTierFamilies(opts.tiers);
-    if (stale.length > 0) {
-      lines.push(`- P6 stale tier entries (>90 days, flagged): ${stale.join(", ")}`);
-    } else {
-      lines.push("- P6 tier provenance: all tiers.json entries are within 90 days of as_of");
-    }
+    lines.push(stale.length > 0 ? `- P6 stale tier entries (>90 days, flagged): ${stale.join(", ")}` : "- P6 tier provenance: all tiers.json entries are within 90 days of as_of");
   }
   lines.push("");
 
   if (opts.doctor) {
     lines.push("## Doctor soft-check (v1: warn-and-report, schema validation is the primary gate)", "");
-    if (opts.doctor.ran) {
-      for (const note of opts.doctor.notes) lines.push(`- ${note}`);
-    } else {
-      lines.push("- doctor did not run — see console warnings (soft)");
-    }
+    if (opts.doctor.ran) for (const note of opts.doctor.notes) lines.push(`- ${note}`);
+    else lines.push("- doctor did not run — see console warnings (soft)");
     lines.push("");
   }
 
-  if (opts.tokenHistory && opts.tokenHistory.available && opts.tokenHistory.rows.length > 0) {
+  if (opts.tokenHistory?.available && opts.tokenHistory.rows.length > 0) {
     lines.push("## Token history (per agent × model, read-only from opencode.db)", "");
     lines.push("| agent | model | calls | input | output | reasoning | cache read | cache write | total | cost |");
     lines.push("|---|---|---|---|---|---|---|---|---|---|");
-    for (const r of opts.tokenHistory.rows) {
-      lines.push(
-        `| ${r.agent} | ${r.model} | ${r.calls} | ${r.inputTokens} | ${r.outputTokens} | ${r.reasoningTokens} | ${r.cacheRead} | ${r.cacheWrite} | ${r.totalTokens} | ${r.cost > 0 ? `$${r.cost.toFixed(4)}` : "$0"} |`,
-      );
-    }
+    for (const r of opts.tokenHistory.rows) lines.push(`| ${r.agent} | ${r.model} | ${r.calls} | ${r.inputTokens} | ${r.outputTokens} | ${r.reasoningTokens} | ${r.cacheRead} | ${r.cacheWrite} | ${r.totalTokens} | ${r.cost > 0 ? `$${r.cost.toFixed(4)}` : "$0"} |`);
     lines.push("");
   }
 

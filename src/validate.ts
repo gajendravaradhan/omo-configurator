@@ -18,21 +18,14 @@ export function localSchemaPath(): string {
 }
 
 export interface SchemaInfo {
-  path: string;
-  id: string;
-  contentHash: string;
+  path: string; id: string; contentHash: string;
 }
 
 /** Load schema metadata ($id + sha256 content hash) for the report (bundle §2 fact 7). */
 export function schemaInfo(): SchemaInfo {
-  const path = localSchemaPath();
-  const raw = readFileSync(path, "utf8");
+  const path = localSchemaPath(); const raw = readFileSync(path, "utf8");
   const parsed = JSON.parse(raw) as { $id?: string; $schema?: string };
-  return {
-    path,
-    id: parsed.$id ?? parsed.$schema ?? "(none)",
-    contentHash: createHash("sha256").update(raw).digest("hex"),
-  };
+  return { path, id: parsed.$id ?? parsed.$schema ?? "(none)", contentHash: createHash("sha256").update(raw).digest("hex") };
 }
 
 type Compiled = (data: unknown) => boolean;
@@ -53,25 +46,19 @@ function getCompiled(): Compiled {
 }
 
 export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
+  valid: boolean; errors: string[];
 }
 
 /** Validate a config against the LOCAL schema. Returns {valid, errors}. */
 export function validateConfig(config: unknown): ValidationResult {
-  const validate = getCompiled();
-  const valid = validate(config);
+  const validate = getCompiled(); const valid = validate(config);
   const errs = (validate as Compiled & { errors?: ErrorObject[] }).errors;
-  return {
-    valid,
-    errors: valid ? [] : (errs ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()),
-  };
+  return { valid, errors: valid ? [] : (errs ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()) };
 }
 
 /** Throw a PlutusError(exit 2) when the config is invalid — the S5 regression surface. */
 export function assertValidConfig(config: unknown, what = "config"): void {
-  const validate = getCompiled();
-  const valid = validate(config);
+  const validate = getCompiled(); const valid = validate(config);
   if (!valid) {
     const errs = (validate as Compiled & { errors?: ErrorObject[] }).errors ?? [];
     const detail = errs.map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()).join("\n  - ");
@@ -102,28 +89,19 @@ export function validateOpencodeOwned(
     // because the oh-my-opencode schema REQUIRES it at the [opencode] top level.
     git_master: { commit_footer: true, include_co_authored_by: true, git_env_prefix: "GIT_MASTER=1" },
   };
-  if (ownedAgents.length > 0) {
-    const agents = (section.agents ?? {}) as Record<string, unknown>;
-    probe.agents = {};
-    for (const a of ownedAgents) {
-      const entry = agents[a];
+  const probeOwned = (group: "agents" | "categories", owned: string[]) => {
+    if (!owned.length) return;
+    const entries = (section[group] ?? {}) as Record<string, unknown>;
+    probe[group] = {};
+    for (const s of owned) {
+      const entry = entries[s];
       if (!entry || typeof entry !== "object") continue;
-      const owned: Record<string, unknown> = {};
-      for (const k of OWNED_SLOT_KEYS) if (k in (entry as Record<string, unknown>)) owned[k] = (entry as Record<string, unknown>)[k];
-      (probe.agents as Record<string, unknown>)[a] = owned;
+      const kept: Record<string, unknown> = {};
+      for (const k of OWNED_SLOT_KEYS) if (k in (entry as Record<string, unknown>)) kept[k] = (entry as Record<string, unknown>)[k];
+      (probe[group] as Record<string, unknown>)[s] = kept;
     }
-  }
-  if (ownedCategories.length > 0) {
-    const categories = (section.categories ?? {}) as Record<string, unknown>;
-    probe.categories = {};
-    for (const c of ownedCategories) {
-      const entry = categories[c];
-      if (!entry || typeof entry !== "object") continue;
-      const owned: Record<string, unknown> = {};
-      for (const k of OWNED_SLOT_KEYS) if (k in (entry as Record<string, unknown>)) owned[k] = (entry as Record<string, unknown>)[k];
-      (probe.categories as Record<string, unknown>)[c] = owned;
-    }
-  }
+  };
+  probeOwned("agents", ownedAgents); probeOwned("categories", ownedCategories);
   const valid = validate(probe);
   if (valid) return [];
   return ((validate as Compiled & { errors?: ErrorObject[] }).errors ?? []).map(

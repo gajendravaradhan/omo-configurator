@@ -16,11 +16,7 @@ import { pinnedSidecarPath } from "./config.ts";
 import { PlutusError } from "./errors.ts";
 import { EXIT } from "./types.ts";
 
-export interface ChallengeArgs {
-  slot: string;
-  model: string;
-  sessions: number;
-}
+export interface ChallengeArgs { slot: string; model: string; sessions: number; }
 
 /** Session-level outcome metric — NEVER attributed per-slot / per-tool-call in v1. */
 export interface SessionOutcome {
@@ -46,13 +42,7 @@ export function pinChallenger(slot: string, model: string, sidecarPath: string =
 
 /** Build the comparator report scaffold (session-level metrics only). */
 export function renderComparator(slot: string, model: string, sessions: number, pinned: string[]): string {
-  const outcomes: SessionOutcome[] = Array.from({ length: sessions }, (_, i) => ({
-    session: i + 1,
-    tokens_to_completion: null,
-    tool_calls: null,
-    retries_errors: null,
-    abandoned: null,
-  }));
+  const outcomes: SessionOutcome[] = Array.from({ length: sessions }, (_, i) => ({ session: i + 1, tokens_to_completion: null, tool_calls: null, retries_errors: null, abandoned: null }));
   const lines: string[] = [];
   lines.push("# plutus-challenge (W6.1 stub)", "");
   lines.push(`- Challenged slot: **${slot}**`);
