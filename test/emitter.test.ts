@@ -250,8 +250,9 @@ test("omo.jsonc: parseJsonc handles trailing commas (JSONC feature OMO allows)",
   expect(doc.b).toBe(2);
 });
 
-test("omo.jsonc: readOmoConfig parses the REAL Mac config (comments + trailing commas)", () => {
-  const doc = readOmoConfig("/Users/gajendra/.omo/omo.jsonc")!;
+test("omo.jsonc: readOmoConfig parses a LIVE-SHAPED config (comments + trailing commas + categories)", () => {
+  const p = join(import.meta.dir, "fixtures", "omo-jsonc-live.jsonc");
+  const doc = readOmoConfig(p)!;
   const oc = (doc["[opencode]"] ?? doc) as Record<string, unknown>;
   expect((oc.agents as Record<string, unknown>).sisyphus).toBeDefined();
   expect((oc.categories as Record<string, unknown>)["visual-engineering"]).toBeDefined();

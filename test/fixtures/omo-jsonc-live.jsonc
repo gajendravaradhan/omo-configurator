@@ -1,0 +1,22 @@
+// Live-shaped OMO config fixture — JSONC with comments, URLs and trailing commas.
+// Mirrors the real ~/.omo/omo.jsonc so the parser is tested against production shape
+// WITHOUT hardcoding a developer's home directory (audit finding C3).
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",
+  "codegraph": { "telemetry": true },
+  "[opencode]": {
+    "agents": {
+      "sisyphus": {
+        "model": "kimi-k3", // orchestrator
+        "fallback_models": [
+          { "model": "gpt-5.6-sol", "variant": "medium" },
+        ],
+      },
+      "hephaestus": { "model": "gpt-5.6-sol", "variant": "medium" },
+    },
+    "categories": {
+      "visual-engineering": { "model": "qwen3.7-max" },
+      "deep": { "model": "gpt-5.6-sol", "variant": "high" },
+    },
+  },
+}

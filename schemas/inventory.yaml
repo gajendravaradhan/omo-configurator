@@ -18,6 +18,16 @@ properties:
   version:
     type: integer
     minimum: 1
+  demand:
+    type: object
+    additionalProperties: false
+    properties:
+      per_slot_tokens:
+        type: object
+        additionalProperties: { type: number, exclusiveMinimum: 0 }
+      default_tokens: { type: number, exclusiveMinimum: 0 }
+      sigma: { type: number, exclusiveMinimum: 0, maximum: 1 }
+      observed_span_hours: { type: number, exclusiveMinimum: 0 }
   providers:
     type: object
     additionalProperties:
@@ -34,6 +44,21 @@ properties:
         window_resets:
           type: [string, "null"]
           format: date-time
+        window_dollars:
+          description: Window capacity in USD spend (opencode-go bills in dollars). Mutually exclusive with window_tokens.
+          anyOf:
+            - type: number
+              exclusiveMinimum: 0
+            - type: "null"
+        metered:
+          description: Pay-per-token provider with no window (e.g. DeepSeek direct). Mutually exclusive with window_tokens.
+          type: boolean
+        window_tokens:
+          description: Absolute window capacity in tokens. null/absent = UNKNOWN (never guessed).
+          anyOf:
+            - type: number
+              exclusiveMinimum: 0
+            - type: "null"
         metered_cost:
           type: object
           additionalProperties: false

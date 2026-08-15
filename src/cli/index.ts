@@ -6,6 +6,7 @@
 // exit codes propagate as PlutusError instead of process.exit() — this keeps the CLI
 // testable in-process (W0.3 RED test) while the bin entry still exits with the code.
 import { createMain, defineCommand, renderUsage, runCommand } from "citty";
+import { DEEPSEEK_SCHEDULE, cronLines, nextTransition, pricingStatus } from "../pricing.ts";
 import { EXIT, type ExitCode } from "../types.ts";
 import { resolveInventoryPath, resolveOmoConfigPath, resolveOpencodeDbPath } from "../config.ts";
 import { optimize } from "../optimize.ts";
@@ -22,6 +23,8 @@ export const optimizeCommand = defineCommand({
     output: { type: "string", description: "oh-my-opencode.json target path (default ~/.config/opencode/oh-my-opencode.json)" },
     "db-path": { type: "string", description: "Override opencode.db path (read-only)" },
     "no-merge": { type: "boolean", default: false, description: "Do not deep-merge into existing config (emit fresh)" },
+      "cost-aversion": { type: "string", description: "0 = pure quality; higher prefers cheap capability on high-volume slots (default 0.35)" },
+      "at": { type: "string", description: "Valuate at this ISO instant instead of now (simulates DeepSeek peak/off-peak)" },
   },
   run: async (ctx) => {
     return optimize({
@@ -29,7 +32,8 @@ export const optimizeCommand = defineCommand({
       mode: ctx.args.mode as "absolute-best" | "adaptive",
       outputPath: resolveOmoConfigPath(ctx.args.output),
       dbPath: resolveOpencodeDbPath(ctx.args["db-path"]),
-      merge: !ctx.args["no-merge"],
+      merge: !ctx.args["no-merge"], costAversion: ctx.args["cost-aversion"] !== undefined ? Number(ctx.args["cost-aversion"]) : undefined,
+      at: ctx.args["at"] ? new Date(String(ctx.args["at"])) : undefined,
     });
   },
 });
@@ -73,6 +77,22 @@ const challengeCommand = defineCommand({
   run: async (ctx) => challenge({ slot: ctx.args.slot, model: ctx.args.model, sessions: Number(ctx.args.sessions) }),
 });
 
+const scheduleCommand = defineCommand({
+  meta: { name: "schedule", description: "Print crontab lines that re-run optimize at every DeepSeek peak/off-peak boundary" },
+  args: { config: { type: "string", description: "Path to inventory.yaml (default inventory.yaml)" } },
+  run(ctx: { args: Record<string, unknown> }) {
+    const cfg = String(ctx.args.config ?? "inventory.yaml");
+    const cmd = `cd ${process.cwd()} && bun run src/cli/index.ts optimize --config ${cfg} >> /tmp/plutus-cron.log 2>&1`;
+    console.log(`# ${pricingStatus(new Date())}`);
+    console.log("# Times below are UTC. Install with: crontab -e   (verify: crontab -l)");
+    console.log("# Each boundary flips DeepSeek between peak and off-peak rates; re-running the");
+    console.log("# optimizer re-prices every candidate and swaps affected slots automatically.");
+    console.log("CRON_TZ=UTC");
+    for (const line of cronLines(DEEPSEEK_SCHEDULE, cmd)) console.log(line);
+    console.log(`# next transition: ${nextTransition(DEEPSEEK_SCHEDULE, new Date()).toISOString()}`);
+  },
+});
+
 /** Command def tree (plain object passed to runCommand — createMain wrapper would hide subCommands). */
 const mainDef = {
   meta: { name: "plutus", version: "0.1.0" },
@@ -82,6 +102,7 @@ const mainDef = {
     "check-chains": checkChainsCommand,
     rollback: rollbackCommand,
     challenge: challengeCommand,
+    schedule: scheduleCommand,
   },
 };
 

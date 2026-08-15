@@ -54,6 +54,18 @@ export type TrustSource = "remote_api" | "local_estimation" | "user_declared";
 /** A provider's capacity as declared in inventory.yaml. */
 export interface ProviderCapacity {
   provider: string; cap: number | null; windowResets?: string | null;
+  /** Absolute window capacity in tokens; null/absent = UNKNOWN (never guessed).*/
+  windowTokens?: number | null;
+  /** Window capacity denominated in USD spend (opencode-go: $12/5h, $30/week, $60/month).
+   *  Mutually exclusive with windowTokens — Go's limits are dollar-based, so counting tokens
+   *  against them is a unit error that under-counts expensive models badly (Kimi K3 at $15/Mout
+   *  burns 54x the budget of DeepSeek Flash at $0.28/Mout for the same token count). */
+  windowDollars?: number | null;
+  /** True for pay-per-token providers with NO window (DeepSeek direct). Distinct from unknown
+   *  capacity: a metered provider is unbounded, and its pressure is $ cost (handled by density),
+   *  not a capacity constraint. Without this flag it would be treated as untrusted/overflow-only
+   *  and effectively never selected. */
+  metered?: boolean;
   meteredCost?: { input: number; output: number }; trust: TrustSource;
 }
 
@@ -61,13 +73,19 @@ export interface ProviderCapacity {
 export interface Candidate {
   entry: ChainEntry; provider: string; model: string; variant?: string;
   fit: number; capability: number; quality: number; projectedCost: number;
+  /** quality / price^lambda — the "bang for buck" score used when the slot is value-seeking. */
+  density?: number;
+  /** Blended $/Mtok (output weighted 3x); undefined when unpriced. */
+  blendedPrice?: number;
   quotaHeadroom: number; trusted: boolean; injected?: boolean;
 }
 
 /** A solved assignment — primary model + fallback list for one slot. */
 export interface Assignment {
   slot: string; kind: SlotKind; primary: Candidate; fallbacks: Candidate[];
-  rationale: string; untrusted?: boolean;
+  rationale: string;
+  /** Set when the budget pass moved this slot off its quality-optimal choice. */
+  budgetDemoted?: boolean; untrusted?: boolean;
 }
 
 /** The full solve result. */

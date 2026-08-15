@@ -1,105 +1,440 @@
 {
-  "version": 1,
-  "as_of": "2026-08-07",
-  "comment": "Static capability tiers (bundle §4: benchmark catalogue infra DELETED; tiers.json is data-only, no fetcher). Capability ∈ {1.0, 0.7, 0.4} from models.json flags + tiers.json. 0.9 discount when self_reported (P6). Entries older than 90 days are flagged in the report (P6).",
-  "families": {
-    "gpt": {
-      "capability": 1.0,
-      "source_url": "https://platform.openai.com/docs/models",
-      "as_of": "2026-08-01",
-      "self_reported": false,
-      "benchmark": "SWE-bench Verified ~68% (OpenAI official)"
+  "version": 2,
+  "as_of": "2026-08-14",
+  "comment": "Capability derived from PUBLISHED BENCHMARK SCORES. Replaces v1, where every benchmark field was a placeholder ('Frontier tier', 'Moonshot official') and the self_reported discount fired only on Chinese vendors - capping DeepSeek/Kimi at 0.63 while GPT/Claude sat at 1.00. Policy: (1) two task-matched axes - agentic_cli (Terminal-Bench 2.x) and agentic_swe (SWE-bench Pro/Verified); (2) self_reported is judged by HARNESS OWNERSHIP and applied identically to every vendor; (3) capability = normalized score on the slot's axis, x0.9 when self_reported; (4) scores are NOT comparable across harnesses - `harness` is recorded so the report can say which. v2.1: self_reported is now PER-AXIS (self_reported_cli / self_reported_swe) because a model can have an independent score on one axis and a vendor score on another - GPT-5.6 Sol is independently benchmarked on Terminal-Bench but its SWE-bench Pro figure comes from the same vendor aggregate as everyone else's. Also adds published $/Mtok so the optimizer can reason about VALUE (quality per unit spend), not just quality. v3: full OpenCode Go catalogue as of 2026-08-14 (19 models incl. Grok 4.5, GLM-5.3, Qwen3.8 Max, MiMo-V2.5, Hy3, and GPT-5.6 Luna which is available ON GO). Prices are Go's own published per-Mtok rates. go_usage_allowance_usd is the monthly usage Go includes for that model ($15 or $60) \u2014 models at $15 give a quarter the value of $60 models, which is the real generalization of the Kimi-K3 '2x usage' note.",
+  "axes": {
+    "agentic_cli": {
+      "benchmark": "Terminal-Bench 2.1",
+      "note": "Long-horizon shell/tool tasks. Best predictor for omo agent slots.",
+      "scale_min": 40,
+      "scale_max": 92
     },
-    "gpt-sol": {
-      "capability": 1.0,
-      "source_url": "https://platform.openai.com/docs/models",
-      "as_of": "2026-08-01",
-      "self_reported": false,
-      "benchmark": "Frontier solver tier"
+    "agentic_swe": {
+      "benchmark": "SWE-bench Pro (vendor aggregate) / Verified",
+      "note": "Repo-level bug fixing. Secondary axis.",
+      "scale_min": 45,
+      "scale_max": 70
     },
-    "gpt-luna": {
-      "capability": 1.0,
-      "source_url": "https://platform.openai.com/docs/models",
-      "as_of": "2026-08-01",
-      "self_reported": false,
-      "benchmark": "Frontier fast tier"
+    "tool_multiturn": {
+      "benchmark": "tau-bench / tau2 / tau3, ClawEval, Toolathlon",
+      "note": "Multi-turn tool coherence and policy adherence across a long dialogue. BFCL grades single calls in isolation; tau grades whether the agent stays coherent over a chain. This is the COMMUNICATOR axis \u2014 Sisyphus's ~1,100-line prompt spans dozens of tool calls.",
+      "scale_min": 50,
+      "scale_max": 90
     },
-    "gpt-nano": {
-      "capability": 0.7,
-      "source_url": "https://platform.openai.com/docs/models",
-      "as_of": "2026-08-01",
-      "self_reported": false,
-      "benchmark": "Lightweight tier"
+    "reasoning": {
+      "benchmark": "GPQA Diamond / HLE / AIME",
+      "note": "Expert reasoning depth. The axis for slots whose output GATES execution (Oracle, Momus, ultrabrain) \u2014 omo: 'Oracle and Momus use the highest-capability models because their outputs gate execution.'",
+      "scale_min": 60,
+      "scale_max": 95
     },
-    "claude": {
-      "capability": 1.0,
-      "source_url": "https://docs.anthropic.com",
-      "as_of": "2026-08-01",
+    "vision": {
+      "benchmark": "OSWorld-Verified / OmniDocBench / MMMU",
+      "note": "Visual and screen understanding. The VISUAL axis \u2014 omo: 'GLM and Kimi are not Gemini substitutes for visual work. Use Qwen.'",
+      "scale_min": 50,
+      "scale_max": 95
+    }
+  },
+  "models": {
+    "gpt-5.6-sol": {
+      "agentic_cli": 89.5,
+      "agentic_swe": 64.6,
+      "harness": "Artificial Analysis (independent), xhigh",
+      "source_url": "https://artificialanalysis.ai/evaluations/terminalbench-v2-1",
+      "as_of": "2026-08-03",
       "self_reported": false,
-      "benchmark": "Frontier tier"
+      "note": "Leads Terminal-Bench 2.1. vals mirror 85.77 on a different scaffold - same rank, lower absolute.",
+      "self_reported_cli": false,
+      "self_reported_swe": true,
+      "price_in_per_mtok": 5,
+      "price_out_per_mtok": 30,
+      "tool_multiturn": 84.0,
+      "reasoning": 93.0,
+      "vision": 84.0,
+      "axis_note": "ESTIMATED from GPT-5.x tau leadership (GPT-5 leads tau-bench retail) and frontier GPQA."
     },
-    "deepseek": {
-      "capability": 0.7,
-      "source_url": "https://api-docs.deepseek.com",
-      "as_of": "2026-07-15",
+    "gpt-5.6-terra": {
+      "agentic_swe": 63.4,
+      "harness": "vendor aggregate (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
       "self_reported": true,
-      "benchmark": "DeepSeek official docs (self-reported)"
+      "note": "No independent TB2.1 entry.",
+      "price_in_per_mtok": 2,
+      "price_out_per_mtok": 12,
+      "tool_multiturn": 82.0,
+      "reasoning": 91.0,
+      "vision": 82.0,
+      "axis_note": "ESTIMATED. LiveBench Agentic Coding 67.98 \u2014 current #1."
     },
-    "deepseek-flash": {
-      "capability": 0.7,
-      "source_url": "https://api-docs.deepseek.com",
-      "as_of": "2026-07-15",
+    "gpt-5.6-luna": {
+      "agentic_swe": 62.7,
+      "harness": "vendor aggregate (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-14",
       "self_reported": true,
-      "benchmark": "DeepSeek official docs (self-reported)"
+      "note": "AVAILABLE ON GO \u2014 2,050 req/5h, the highest-throughput capable model on the plan.",
+      "price_in_per_mtok": 0.2,
+      "price_out_per_mtok": 1.2,
+      "go_usage_allowance_usd": 15,
+      "tool_multiturn": 78.0,
+      "reasoning": 88.0,
+      "vision": 80.0,
+      "axis_note": "ESTIMATED. Intelligence Index 52 vs DeepSeek V4 Pro 53; 91.1% GPQA, 80.9% Terminal-Bench per third-party comparison."
     },
-    "deepseek-thinking": {
-      "capability": 0.7,
-      "source_url": "https://api-docs.deepseek.com",
-      "as_of": "2026-07-15",
+    "gpt-5.5": {
+      "agentic_swe": 58.6,
+      "harness": "vendor aggregate (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
       "self_reported": true,
-      "benchmark": "DeepSeek official docs (self-reported)"
-    },
-    "gemini": {
-      "capability": 0.7,
-      "source_url": "https://ai.google.dev/gemini-api/docs",
-      "as_of": "2026-08-01",
-      "self_reported": false,
-      "benchmark": "Google official"
-    },
-    "kimi": {
-      "capability": 0.7,
-      "source_url": "https://platform.moonshotai.cn/docs",
-      "as_of": "2026-08-01",
-      "self_reported": true,
-      "benchmark": "Moonshot official"
+      "note": "Superseded by 5.6; retained because omo chains still reference it."
     },
     "kimi-k3": {
-      "capability": 0.7,
-      "source_url": "https://platform.moonshotai.cn/docs",
-      "as_of": "2026-08-01",
+      "agentic_cli": 88.3,
+      "agentic_swe": 62.0,
+      "harness": "Moonshot official (KimiCode max)",
+      "source_url": "https://codingfleet.com/blog/terminal-bench-leaderboard-2026/",
+      "as_of": "2026-08-14",
       "self_reported": true,
-      "benchmark": "Moonshot official"
+      "note": "Most expensive on Go: only 110 req/5h. LiveBench top open-weight agentic (57.58).",
+      "price_in_per_mtok": 3.0,
+      "price_out_per_mtok": 15.0,
+      "go_usage_allowance_usd": 15,
+      "tool_multiturn": 82.0,
+      "reasoning": 91.0,
+      "axis_note": "ESTIMATED above K2.6 on the same axes; Moonshot's K3 table leads on agentic rows. LiveBench Agentic Coding 57.58 \u2014 top open-weight."
+    },
+    "kimi-k2.7-code": {
+      "agentic_swe": 59.5,
+      "harness": "vendor aggregate",
+      "source_url": "https://opencode.ai/data/moonshotai",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "1,350 req/5h \u2014 12x K3's throughput at 1/3 the price.",
+      "price_in_per_mtok": 0.95,
+      "price_out_per_mtok": 4.0,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 78.0,
+      "reasoning": 86.0,
+      "axis_note": "ESTIMATED between K2.6 and K3; coding-specialised variant."
+    },
+    "kimi-k2.6": {
+      "agentic_cli": 66.7,
+      "agentic_swe": 58.6,
+      "harness": "vendor, TB2.0",
+      "source_url": "https://arxiv.org/pdf/2605.23170",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "TB2.0 - NOT comparable to 2.1. SWE-bench Verified 80.2.",
+      "price_in_per_mtok": 0.95,
+      "price_out_per_mtok": 4.0,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 80.9,
+      "reasoning": 90.5,
+      "axis_note": "ClawEval 80.9 (multi-turn tool), GPQA-D 90.5, BrowseComp 83.2, AIME 2026 96.4."
+    },
+    "deepseek-v4-flash": {
+      "agentic_cli": 82.7,
+      "agentic_swe": 54.4,
+      "harness": "DeepSeek own harness, minimal mode, max effort",
+      "source_url": "https://deepseekv4pro.com/news/deepseek-v4-flash-official-release-codex-agent-benchmarks",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "31,650 req/5h \u2014 the highest-throughput model on Go. TB2.1 82.7.",
+      "price_in_per_mtok": 0.14,
+      "price_out_per_mtok": 0.28,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 66.0,
+      "reasoning": 85.0,
+      "axis_note": "ESTIMATED from the 0731 agent table; DeepSeek publishes no tau or GPQA figure for Flash."
+    },
+    "deepseek-v4-pro": {
+      "agentic_cli": 72.1,
+      "agentic_swe": 55.4,
+      "harness": "DeepSeek own harness (V4-Pro-Preview)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "Loses to its own Flash sibling on every published agent benchmark.",
+      "price_in_per_mtok": 0.435,
+      "price_out_per_mtok": 0.87,
+      "go_usage_allowance_usd": 15,
+      "tool_multiturn": 68.0,
+      "reasoning": 90.1,
+      "axis_note": "GPQA-D 90.1, BrowseComp 83.4, HMMT 95.2. tool_multiturn ESTIMATED from BrowseComp/agent rows \u2014 no tau score published."
+    },
+    "glm-5.2": {
+      "agentic_cli": 63.5,
+      "agentic_swe": 62.1,
+      "harness": "third-party measured (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-14",
+      "self_reported": false,
+      "note": "$60 allowance \u2014 4x GLM-5.3's. Better value than 5.3 until 5.3 is independently scored.",
+      "self_reported_swe": false,
+      "self_reported_cli": true,
+      "price_in_per_mtok": 1.4,
+      "price_out_per_mtok": 4.4,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 72.0,
+      "reasoning": 87.0,
+      "axis_note": "ESTIMATED marginally above 5.1."
+    },
+    "glm-5.1": {
+      "agentic_cli": 63.5,
+      "agentic_swe": 58.4,
+      "harness": "vendor, TB2.0",
+      "source_url": "https://arxiv.org/pdf/2605.23170",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "price_in_per_mtok": 1.4,
+      "price_out_per_mtok": 4.4,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 70.6,
+      "reasoning": 86.2,
+      "axis_note": "tau-3 70.6, GPQA-D 86.2, BrowseComp 68.0, AIME 2026 95.3."
+    },
+    "qwen3.7-max": {
+      "agentic_swe": 60.6,
+      "harness": "vendor aggregate (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "SWE-bench Verified 80.4.",
+      "price_in_per_mtok": 2.5,
+      "price_out_per_mtok": 7.5,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 70.0,
+      "reasoning": 88.0,
+      "vision": 82.0,
+      "axis_note": "ESTIMATED below 3.8 Max."
+    },
+    "qwen3.7-plus": {
+      "agentic_swe": 58.0,
+      "harness": "ESTIMATED \u2014 interpolated below Max",
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "ESTIMATED. 4,300 req/5h.",
+      "price_in_per_mtok": 0.4,
+      "price_out_per_mtok": 1.6,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 66.0,
+      "reasoning": 84.0,
+      "vision": 78.0,
+      "axis_note": "ESTIMATED."
+    },
+    "qwen3.6-plus": {
+      "agentic_swe": 51.5,
+      "harness": "Qwen3.6 model card, TB2.0",
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "Model card: SWE-V 73.4, SWE-Pro 49.5, TB2.0 51.5.",
+      "price_in_per_mtok": 0.5,
+      "price_out_per_mtok": 3.0,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 63.0,
+      "reasoning": 80.0,
+      "vision": 75.0,
+      "axis_note": "ESTIMATED. Qwen3.6 card: SWE-V 73.4, SWE-Pro 49.5, TB2.0 51.5."
+    },
+    "mimo-v2.5-pro": {
+      "agentic_cli": 68.4,
+      "harness": "vendor, TB2.0",
+      "source_url": "https://arxiv.org/pdf/2605.23170",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "TB2.0 68.4 \u2014 ahead of DeepSeek V4 Pro (67.9).",
+      "price_in_per_mtok": 0.435,
+      "price_out_per_mtok": 0.87,
+      "go_usage_allowance_usd": 15,
+      "agentic_swe": 57.2,
+      "tool_multiturn": 72.9,
+      "reasoning": 66.7,
+      "axis_note": "tau-3 72.9, ClawEval 64.0, GPQA-D 66.7, GDPval 1581 Elo. Strong tool use, notably WEAK reasoning \u2014 do not use for gating slots."
+    },
+    "minimax-m3": {
+      "agentic_swe": 59.0,
+      "harness": "vendor aggregate (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "SWE-bench Verified 80.5.",
+      "price_in_per_mtok": 0.3,
+      "price_out_per_mtok": 1.2,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 58.0,
+      "reasoning": 92.68,
+      "axis_note": "GPQA-D 92.68 (high). tool_multiturn ESTIMATED LOW: omo reports MiniMax 'loses coherence on multi-step deep work' \u2014 the multi-turn axis is where that shows, and it is excluded from deep slots regardless."
+    },
+    "minimax-m2.7": {
+      "agentic_swe": 52.0,
+      "harness": "ESTIMATED",
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "self_reported": true,
+      "note": "ESTIMATED.",
+      "price_in_per_mtok": 0.3,
+      "price_out_per_mtok": 1.2,
+      "go_usage_allowance_usd": 60,
+      "tool_multiturn": 55.0,
+      "reasoning": 85.0,
+      "axis_note": "ESTIMATED."
+    },
+    "grok-4.5": {
+      "price_in_per_mtok": 2.0,
+      "price_out_per_mtok": 6.0,
+      "go_usage_allowance_usd": 15,
+      "agentic_cli": 83.3,
+      "agentic_swe": 64.7,
+      "harness": "xAI own launch table",
+      "self_reported": true,
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "note": "TB2.1 83.3, SWE-Pro 64.7 (xAI). $15 allowance = 120 req/5h.",
+      "tool_multiturn": 76.0,
+      "reasoning": 89.0,
+      "axis_note": "ESTIMATED. DeepSWE 1.0 62.0, SWE Marathon 29.0 (leads that row), LiveBench Agentic 59.8."
+    },
+    "glm-5.3": {
+      "price_in_per_mtok": 1.4,
+      "price_out_per_mtok": 4.4,
+      "go_usage_allowance_usd": 15,
+      "agentic_swe": 62.1,
+      "harness": "Z.ai launch table; TB3.0 not comparable to 2.1",
+      "self_reported": true,
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "note": "Z.ai reports DeepSWE v1.1 66.9 vs 5.2's 46.2, but independent DeepSWE put 5.2 at 44% \u2014 vendor table runs optimistic. swe carried from 5.2 pending independent replication.",
+      "tool_multiturn": 72.0,
+      "reasoning": 87.0,
+      "axis_note": "ESTIMATED; carried from 5.2 pending independent replication \u2014 Z.ai's launch table runs optimistic (it lists 5.2 at 46.2 DeepSWE where the independent leaderboard shows 44%)."
+    },
+    "mimo-v2.5": {
+      "price_in_per_mtok": 0.14,
+      "price_out_per_mtok": 0.28,
+      "go_usage_allowance_usd": 60,
+      "agentic_swe": 55.0,
+      "harness": "ESTIMATED \u2014 no published standalone score",
+      "self_reported": true,
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "note": "ESTIMATED. Cheapest on Go with DeepSeek Flash: 30,100 req/5h.",
+      "tool_multiturn": 68.0,
+      "reasoning": 63.0,
+      "axis_note": "ESTIMATED below Pro."
+    },
+    "qwen3.8-max": {
+      "price_in_per_mtok": 2.0,
+      "price_out_per_mtok": 6.0,
+      "go_usage_allowance_usd": 15,
+      "agentic_cli": 86.6,
+      "agentic_swe": 67.7,
+      "harness": "Alibaba official launch table (Aug 3 2026)",
+      "self_reported": true,
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "note": "HIGHEST SWE-bench Pro of any Go model (67.7). No SWE-bench Verified published. Vendor-reported, independent replication pending.",
+      "tool_multiturn": 72.5,
+      "reasoning": 92.6,
+      "vision": 86.1,
+      "axis_note": "Toolathlon Verified 72.5; GPQA-D 92.6; OSWorld-Verified 86.1, OmniDocBench 92.1, IFBench 82.8 (Alibaba launch table, Aug 3 2026)."
+    },
+    "hy3": {
+      "price_in_per_mtok": 0.14,
+      "price_out_per_mtok": 0.58,
+      "go_usage_allowance_usd": 60,
+      "agentic_swe": 50.0,
+      "harness": "ESTIMATED \u2014 no published score",
+      "self_reported": true,
+      "source_url": "https://opencode.ai/docs/go/",
+      "as_of": "2026-08-14",
+      "note": "ESTIMATED.",
+      "tool_multiturn": 62.0,
+      "reasoning": 78.0,
+      "axis_note": "ESTIMATED \u2014 Tencent publishes no comparable agent table."
+    },
+    "gpt-5.4": {
+      "agentic_swe": 57.7,
+      "harness": "vendor aggregate (llm-stats)",
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
+      "self_reported": true,
+      "note": "Legacy; superseded by 5.5/5.6 but still named in omo chains.",
+      "price_in_per_mtok": 1.25,
+      "price_out_per_mtok": 10.0
+    },
+    "gpt-5.4-nano": {
+      "agentic_swe": 48.0,
+      "harness": "ESTIMATED - lightweight tier",
+      "source_url": "https://platform.openai.com/docs/models",
+      "as_of": "2026-08-10",
+      "self_reported": true,
+      "note": "ESTIMATED: no published agentic score. Speed/cost tier.",
+      "price_in_per_mtok": 0.05,
+      "price_out_per_mtok": 0.4
+    },
+    "gpt-5-nano": {
+      "agentic_swe": 48.0,
+      "harness": "ESTIMATED - lightweight tier",
+      "source_url": "https://platform.openai.com/docs/models",
+      "as_of": "2026-08-10",
+      "self_reported": true,
+      "note": "ESTIMATED: no published agentic score. Speed/cost tier.",
+      "price_in_per_mtok": 0.05,
+      "price_out_per_mtok": 0.4
+    }
+  },
+  "families": {
+    "gpt": {
+      "capability": 0.9,
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
+      "self_reported": true,
+      "benchmark": "SWE-bench Pro vendor aggregate, family floor"
+    },
+    "deepseek": {
+      "capability": 0.85,
+      "source_url": "https://deepseekv4pro.com/news/deepseek-v4-flash-official-release-codex-agent-benchmarks",
+      "as_of": "2026-07-31",
+      "self_reported": true,
+      "benchmark": "TB2.1 82.7 (V4 Flash 0731), family floor"
+    },
+    "kimi": {
+      "capability": 0.85,
+      "source_url": "https://codingfleet.com/blog/terminal-bench-leaderboard-2026/",
+      "as_of": "2026-08-06",
+      "self_reported": true,
+      "benchmark": "TB2.1 88.3 (K3), family floor"
     },
     "glm": {
-      "capability": 0.7,
-      "source_url": "https://z.ai",
-      "as_of": "2026-08-01",
-      "self_reported": true,
-      "benchmark": "Zhipu official"
-    },
-    "minimax": {
-      "capability": 0.4,
-      "source_url": "https://platform.minimaxi.com",
-      "as_of": "2026-08-01",
-      "self_reported": true,
-      "benchmark": "MiniMax official"
+      "capability": 0.75,
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
+      "self_reported": false,
+      "benchmark": "SWE-bench Pro 62.1 (5.2), family floor"
     },
     "qwen": {
-      "capability": 0.7,
-      "source_url": "https://qwenlm.github.io",
-      "as_of": "2026-08-01",
+      "capability": 0.75,
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
       "self_reported": true,
-      "benchmark": "Qwen team"
+      "benchmark": "SWE-bench Pro 60.6 (3.7 Max), family floor"
+    },
+    "mimo": {
+      "capability": 0.75,
+      "source_url": "https://arxiv.org/pdf/2605.23170",
+      "as_of": "2026-06-01",
+      "self_reported": true,
+      "benchmark": "TB2.0 68.4 (Pro), family floor"
+    },
+    "minimax": {
+      "capability": 0.6,
+      "source_url": "https://www.morphllm.com/swe-bench-pro",
+      "as_of": "2026-08-10",
+      "self_reported": true,
+      "benchmark": "SWE-bench Pro 59.0 (M3), family floor"
     }
   }
 }

@@ -20,12 +20,34 @@ export class Availability {
   /** provider id → model id → capability metadata (from models.json). */
   readonly metaByProvider: Map<string, Map<string, ModelMeta>>;
 
-  constructor(modelsByProvider: Map<string, Set<string>>, metaByProvider: Map<string, Map<string, ModelMeta>>) {
+  /**
+   * Providers the user actually HAS (from inventory.yaml). models.json lists ~178 providers that
+   * EXIST; only the intersection is usable.
+   *
+   * Without this gate the solver assigned anthropic models (claude-opus-5 to `writing`,
+   * claude-fable-5 to `artistry`) even though Claude Pro OAuth is blocked for third-party tools
+   * and no Anthropic API key is declared — slots that would fail at runtime. Undefined means
+   * "no allowlist" (used by unit tests that construct Availability directly).
+   */
+  readonly allowedProviders?: ReadonlySet<string>;
+
+  constructor(
+    modelsByProvider: Map<string, Set<string>>,
+    metaByProvider: Map<string, Map<string, ModelMeta>>,
+    allowedProviders?: ReadonlySet<string>,
+  ) {
     this.modelsByProvider = modelsByProvider;
     this.metaByProvider = metaByProvider;
+    this.allowedProviders = allowedProviders;
+  }
+
+  /** True when the provider is declared in inventory (or no allowlist is in force). */
+  isAllowed(provider: string): boolean {
+    return !this.allowedProviders || this.allowedProviders.has(provider);
   }
 
   hasModel(provider: string, model: string): boolean {
+    if (!this.isAllowed(provider)) return false;
     const set = this.modelsByProvider.get(provider);
     return Boolean(set && (set.size === 0 || set.has(model)));
   }
@@ -41,7 +63,7 @@ export class Availability {
   }
 
   providers(): string[] {
-    return [...this.modelsByProvider.keys()];
+    return [...this.modelsByProvider.keys()].filter((p) => this.isAllowed(p));
   }
 }
 
@@ -101,5 +123,6 @@ export function loadAvailability(inventory: Inventory, modelsPathOverride?: stri
       modelsByProvider.set(pid, new Set<string>()); metaByProvider.set(pid, new Map<string, ModelMeta>());
     }
   }
-  return new Availability(modelsByProvider, metaByProvider);
+  // Gate on inventory: only declared providers are selectable.
+  return new Availability(modelsByProvider, metaByProvider, new Set(Object.keys(inventory.providers)));
 }
