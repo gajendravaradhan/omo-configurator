@@ -1,0 +1,26 @@
+version: 1
+providers:
+  openai:
+    cap: null
+    window_tokens: 30000000
+    trust: user_declared
+
+  # OpenCode Go bills in DOLLARS, not tokens: $12/5h, $30/week, $60/month.
+  # Counting tokens here is a unit error — Kimi K3 at $15/Mout burns 54x the
+  # budget of DeepSeek V4 Flash at $0.28/Mout for the same token count.
+  opencode-go:
+    cap: null
+    window_dollars: 30
+    trust: user_declared
+
+  # Pay-per-token, no window. metered:true keeps it unbounded so it competes
+  # on cost rather than being rationed as "unknown capacity".
+  deepseek:
+    cap: null
+    metered: true
+    trust: user_declared
+
+demand:
+  default_tokens: 50000
+  sigma: 0.8
+  observed_span_hours: 168
