@@ -56,11 +56,37 @@ export interface Status {
 
 export interface ChainEntry { model: string; providers: string[]; position: number }
 export interface SlotChainInfo { kind: string; name: string; fallbackChain: ChainEntry[] }
+export interface ProviderBudget {
+  provider: string; capacityTokens: number | null; remainingTokens: number | null;
+  consumedTokens: number; trusted: boolean; overCommitted: boolean;
+}
+export interface BudgetResult {
+  budgets: ProviderBudget[];
+  demoted: Array<{ slot: string; from: string; to: string; reason: string }>;
+  overCommitted: string[];
+  enforced: boolean;
+}
+export interface BurnForecast {
+  provider: string; burnPerHour: number; hoursToReset: number | null;
+  projectedTokens: number; remainingTokens: number | null;
+  willExhaust: boolean; hoursToExhaustion: number | null;
+}
+export interface PricingInfo {
+  status: string; peakNow: boolean; effectiveFrom: string;
+  windows: Array<{ startHourUtc: number; endHourUtc: number }>;
+  nextTransition: string; sourceUrl: string; cron: string[];
+}
+
 export interface SolvePreview {
   assignments: Array<{
     slot: string;
     kind: string;
-    primary: { model: string; provider: string; fit: number; capability: number; quality: number; trusted: boolean };
+    primary: { model: string; provider: string; fit: number; capability: number; quality: number; trusted: boolean
+  budget?: BudgetResult;
+  burn?: BurnForecast[];
+  pricing?: string;
+  demandSource?: Record<string, string>;
+};
     fallbacks: Array<{ model: string; provider: string; fit: number }>;
     rationale: string;
     untrusted?: boolean;
@@ -68,6 +94,11 @@ export interface SolvePreview {
   allUntrusted: boolean;
   skippedPinned: string[];
   report: string;
+}
+
+export interface BudgetBearing {
+  budget?: BudgetResult; burn?: BurnForecast[]; pricing?: string;
+  demandSource?: Record<string, string>;
 }
 
 export interface TokenHistory {

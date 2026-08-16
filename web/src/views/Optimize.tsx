@@ -6,6 +6,9 @@ import { Badge, CodeBlock, DataTable, MonoChip, Panel, PanelStates, RunButton, T
 
 interface OptimizeResult {
   solve: { assignments: SolvePreview["assignments"]; allUntrusted: boolean; skippedPinned: string[] };
+  budget?: SolvePreview["budget"];
+  burn?: SolvePreview["burn"];
+  pricing?: string;
   emit: { configPath: string; backupPath: string | null } | null;
   document: Record<string, unknown> | null;
   report: string;
@@ -86,7 +89,10 @@ export function OptimizeView() {
         actions={
           shown ? (
             <div className="row">
-              {shown.solve.allUntrusted && <Badge variant="warning">quality-only — no verified capacity</Badge>}
+              {shown.budget?.enforced
+                ? <Badge variant="success">budget enforced</Badge>
+                : <Badge variant="warning">budget NOT enforced</Badge>}
+              {shown.solve.allUntrusted && !shown.budget?.enforced && <Badge variant="warning">quality-only — no verified capacity</Badge>}
               {shown.solve.skippedPinned.length > 0 && <Badge variant="accent">pinned: {shown.solve.skippedPinned.join(", ")}</Badge>}
             </div>
           ) : undefined
@@ -109,6 +115,86 @@ export function OptimizeView() {
                 </tr>
               ))}
             </DataTable>
+          )}
+        </PanelStates>
+      </Panel>
+
+      <Panel
+        title="Consumption limits"
+        overline="budget"
+        actions={shown?.budget ? (
+          <div className="row">
+            {shown.budget.enforced
+              ? <Badge variant="success">enforced across {shown.budget.budgets.filter((b) => b.trusted).length} provider(s)</Badge>
+              : <Badge variant="warning">not enforced</Badge>}
+            {shown.budget.overCommitted.length > 0 && <Badge variant="danger">over-committed: {shown.budget.overCommitted.length}</Badge>}
+          </div>
+        ) : undefined}
+      >
+        <PanelStates loading={preview.loading || busy !== null} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown?.budget} emptyText="Run a preview or optimize to see budget">
+          {shown?.budget && (
+            <>
+              {shown.pricing && <p className="body-sm text-secondary">{shown.pricing}</p>}
+
+              {!shown.budget.enforced && (
+                <p className="body-sm">
+                  No provider declares a window, so consumption limits are <strong>not</strong> applied and
+                  assignments are quality-optimal only. Declare <code>window_tokens</code> (token-metered
+                  plans), <code>window_dollars</code> (OpenCode Go bills in USD), or <code>metered: true</code>
+                  (pay-per-token, no window) per provider in Inventory.
+                </p>
+              )}
+
+              {shown.budget.enforced && (
+                <DataTable headers={["provider", "capacity", "consumed", "remaining", "trust"]}>
+                  {shown.budget.budgets.map((b) => (
+                    <tr key={b.provider}>
+                      <td><strong>{b.provider}</strong></td>
+                      <td>{b.capacityTokens === null ? <Badge variant="warning">unknown</Badge>
+                        : !Number.isFinite(b.capacityTokens) ? <Badge variant="accent">unbounded (metered)</Badge>
+                        : Math.round(b.capacityTokens).toLocaleString()}</td>
+                      <td>{Math.round(b.consumedTokens).toLocaleString()}</td>
+                      <td>{b.remainingTokens === null || !Number.isFinite(b.remainingTokens) ? "—" : Math.round(b.remainingTokens).toLocaleString()}</td>
+                      <td>{b.trusted ? <Badge variant="success">declared</Badge> : <Badge variant="warning">unknown</Badge>}</td>
+                    </tr>
+                  ))}
+                </DataTable>
+              )}
+
+              {shown.budget.demoted.length > 0 && (
+                <>
+                  <p className="body-sm text-secondary" style={{ marginTop: 12 }}>
+                    Moved off the quality-optimal pick to stay inside a window:
+                  </p>
+                  <DataTable headers={["slot", "from", "to", "reason"]}>
+                    {shown.budget.demoted.map((d) => (
+                      <tr key={d.slot}>
+                        <td><strong>{d.slot}</strong></td>
+                        <td><MonoChip text={d.from} /></td>
+                        <td><MonoChip text={d.to} /></td>
+                        <td className="body-sm text-secondary">{d.reason}</td>
+                      </tr>
+                    ))}
+                  </DataTable>
+                </>
+              )}
+
+              {shown.budget.overCommitted.length > 0 && (
+                <p className="body-sm" style={{ marginTop: 12 }}>
+                  <strong>Over-committed:</strong> {shown.budget.overCommitted.join(", ")} — no provider has
+                  room for these. The config is still written and is the best available, but the declared
+                  capacity cannot cover the demand. Raise a window, lower <code>demand.default_tokens</code>,
+                  or add capacity.
+                </p>
+              )}
+
+              {(shown.burn ?? []).filter((f) => f.willExhaust).map((f) => (
+                <p key={f.provider} className="body-sm" style={{ marginTop: 8 }}>
+                  <strong>Burn alert — {f.provider}:</strong> at {Math.round(f.burnPerHour).toLocaleString()} tok/h
+                  it exhausts in {f.hoursToExhaustion?.toFixed(1)}h, before the window resets in {f.hoursToReset?.toFixed(1)}h.
+                </p>
+              ))}
+            </>
           )}
         </PanelStates>
       </Panel>

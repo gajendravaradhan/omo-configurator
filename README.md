@@ -25,7 +25,7 @@ inventory). The single network dependency is `plutus discover`, which shells out
 - [Why it exists](#why-it-exists)
 - [Quick start](#quick-start)
 - [Installation](#installation)
-- [The five commands](#the-five-commands)
+- [The six commands](#the-six-commands)
   - [`plutus optimize`](#plutus-optimize)
   - [`plutus discover`](#plutus-discover)
   - [`plutus check-chains`](#plutus-check-chains)
@@ -36,6 +36,8 @@ inventory). The single network dependency is `plutus discover`, which shells out
   - [`pinned.json` (sidecar)](#pinnedjson-sidecar)
   - [`history.jsonl` (telemetry ledger)](#historyjsonl-telemetry-ledger)
 - [How the solver works](#how-the-solver-works)
+- [Consumption limits](#consumption-limits)
+- [Time-aware pricing](#time-aware-pricing)
   - [Data sources](#data-sources)
   - [Quality model: `quality = fit × capability`](#quality-model-quality--fit--capability)
   - [The P5 tiebreak chain](#the-p5-tiebreak-chain)
@@ -187,7 +189,7 @@ inline SVG icons only.
 
 ---
 
-## The five commands
+## The six commands
 
 ### `plutus optimize`
 
@@ -430,17 +432,98 @@ the constants are declared with `var` inside `dist/index.js` and are **not** exp
 level (`@oh-my-opencode/model-core` is not on npm). `acorn` parses the bundle, we find the
 `VariableDeclarator` initializers, and materialize the object/array literals structurally.
 
-### Quality model: `quality = fit × capability`
+### Quality model: `quality = fit × capability`, ranked by value density
 
-A **weighted product with coarse discrete levels** (the α/β exponent form was deleted by the
-adversarial review — `quality = fit^α × capability^β` is gone).
+Both terms are now derived from evidence rather than hand-set levels.
 
-- `fit ∈ {1.0 head, 0.8 member, 0.5 family-match-only, 0 forbidden}` — derived from chain
-  position (`position 0` = the author's considered head for that slot's prompt).
-- `capability ∈ {1.0, 0.7, 0.4}` — from models.json flags + `tiers.json`:
-  - both `reasoning` and `tool_call` → 1.0; exactly one → 0.7; neither → 0.4;
-  - then **min** with the family's tier from `tiers.json`;
-  - **0.9 self-report discount** when the tier entry is `self_reported` (P6).
+#### `fit` — omo's philosophy, extrapolated (`src/fit-model.ts`)
+
+omo's stated principle: *"Every agent's prompt is tuned to match its model's personality. When
+you change the model, you change the brain."* Chains encode that reasoning **for the models that
+existed when the docs were written** — they are evidence of the reasoning, not the reasoning
+itself. omo's catalogue moves faster than its docs (Qwen3.8 Max, Grok 4.5, GLM-5.3, MiMo-V2.5 and
+Hy3 are live on OpenCode Go and appear in no chain), so fit is computed from **archetype
+affinity**, and chain membership contributes as evidence rather than acting as a gate.
+
+Four archetypes, each taken from omo's matching guide:
+
+| Archetype | Slots | What the prompt demands |
+|---|---|---|
+| **Communicator** | sisyphus, metis, atlas\*, sisyphus-junior, prometheus\*, writing, unspecified-* | Following ~1,100-line multi-step prompts, coherence across dozens of tool calls, nuanced delegation |
+| **Deep specialist** | hephaestus, oracle, momus, deep, ultrabrain | Principle-driven autonomous execution; *"emerge three hours later with a solution nobody else could have found"* |
+| **Visual** | visual-engineering, artistry, multimodal-looker | *"GLM and Kimi are not Gemini substitutes for visual work. Use Qwen."* |
+| **Speed utility** | explore, librarian, quick | Grep-style pattern discovery — the one place MiniMax is sanctioned |
+
+\* dual-prompt agents: omo switches prompt by detected family, so both archetypes fit natively.
+
+`fit = affinity(family, archetype) × promptPathFactor`, then a **chain-evidence bonus** (head
++8%, member +4%, capped at 1.0) — being the author's chosen head is real signal, just not a veto
+over models the author never saw. Families omo has not written about (grok, mimo, hy) are scored
+conservatively against their closest documented analogue: an uncatalogued model earns its place on
+capability, it does not get a fit bonus for novelty.
+
+#### `capability` — a weighted blend over five benchmark axes
+
+Capability is multi-dimensional; a model strong at repo-level coding can be weak at multi-turn
+tool coherence. Each slot loads on the axes that actually predict its work:
+
+| Axis | Benchmarks | Drives |
+|---|---|---|
+| `tool_multiturn` | τ-bench / τ² / τ³, ClawEval, Toolathlon | Communicators |
+| `agentic_swe` | SWE-bench Pro / Verified | Deep specialists |
+| `agentic_cli` | Terminal-Bench 2.x | Speed utilities |
+| `reasoning` | GPQA-Diamond, HLE, AIME | Execution-gating slots |
+| `vision` | OSWorld-Verified, OmniDocBench, MMMU | Visual slots |
+
+The distinction that forced this: **models strong on BFCL fall apart on τ-bench**, because BFCL
+grades single tool calls in isolation while τ grades multi-turn coherence. Sisyphus spans dozens
+of tool calls — coherence *is* the job, and a repo-coding score does not predict it. The clearest
+case in the data is MiMo-V2.5-Pro: τ³ **72.9** but GPQA-D **66.7**. Strong tool use, weak
+reasoning. It scores well for `librarian` and poorly for `oracle`, which is correct, because
+Oracle's output gates execution.
+
+Scores are normalized per axis, weights renormalized when an axis is unpublished (a model is never
+penalised for a missing benchmark, only for a low one), and discounted **0.9 when self-reported**.
+`self_reported` is judged **per axis by harness ownership** and applied identically to every
+vendor — GPT-5.6 Sol is independently benchmarked on Terminal-Bench but its SWE-bench Pro figure
+comes from the same vendor aggregate as everyone else's, so it takes the discount there too.
+
+Every entry in `tiers.json` carries `harness`, `source_url`, `as_of` and `self_reported`.
+Estimated figures are labelled `ESTIMATED` in `axis_note`. **Scores are not comparable across
+harnesses** — Kimi K3 is 88.3 on Moonshot's own harness and 80.90 on the vals mirror — which is
+why the harness is recorded rather than the number alone.
+
+#### Value density — quality per unit spend
+
+Quality alone always picks the flagship. On a flat subscription both flagship and budget model
+have zero marginal cost, so the cost tiebreak never fires and the optimizer reaches for the most
+expensive model available.
+
+```
+density(m) = quality(m) / blendedPrice(m)^lambda
+```
+
+`lambda` is per-slot and **opt-in**: quality is the default, and a slot must be named in
+`VALUE_SEEKING_SLOTS` (explore, librarian, quick, unspecified-low) to chase value. Slots whose
+output gates execution force `lambda = 0` outright. Downgrading a working agent is a worse failure
+than overspending on it — an earlier blacklist-shaped policy handed MiniMax to `sisyphus-junior`,
+which is exactly the mistake the whitelist prevents.
+
+Worked example — GPT-5.6 Sol vs Luna, same two models, opposite answers:
+
+| slot | model | capability | $/Mtok blended | λ | density |
+|---|---|---|---|---|---|
+| explore | gpt-5.6-sol | 0.969 | 23.75 | 0.35 | 0.320 |
+| explore | **gpt-5.6-luna** | 0.729 | 0.95 | 0.35 | **0.742** |
+| oracle | **gpt-5.6-sol** | 0.969 | 23.75 | 0.00 | **0.969** |
+| oracle | gpt-5.6-luna | 0.729 | 0.95 | 0.00 | 0.729 |
+
+#### No injection
+
+There is no vendor special-casing. An earlier version force-injected DeepSeek into GPT-family
+slots (and later, any high-capability unchained model). Both were hand-coded preferences layered
+on top of the scoring model and have been removed. Selection is decided end to end by
+fit × capability → density → forbidden filter → capacity constraint.
 
 ### The P5 tiebreak chain
 
@@ -514,6 +597,61 @@ Verified by schema inspection (not assumed):
 - Fallback lists are capped at **5 entries**.
 
 ---
+
+## Consumption limits
+
+Budget enforcement is real: `cap` alone was previously a tiebreak with no capacity constraint
+anywhere, so "stay within limits" was unimplemented. Consumption is now computed **in each
+provider's own billing unit**.
+
+```
+consumption(p) = Σ_{s: provider(m_s)=p}  demand(s) · unitCost(m_s, p)
+```
+
+| Provider shape | Declared as | Unit | Notes |
+|---|---|---|---|
+| Token-windowed | `window_tokens: N` | tokens | e.g. Codex |
+| Dollar-windowed | `window_dollars: N` | USD | **OpenCode Go bills in dollars** — $12/5h, $30/week, $60/month |
+| Metered | `metered: true` | unbounded | Pay-per-token, no window; pressure is $ via density |
+| Unknown | both absent | — | Overflow-only: used only when nothing else fits |
+
+**The Go unit matters.** Counting tokens against a dollar limit is a unit error: Kimi K3 at
+$15/Mout burns **54×** the budget of DeepSeek V4 Flash at $0.28/Mout for identical token counts.
+Go also publishes a per-model monthly usage allowance ($15 or $60) — recorded as
+`go_usage_allowance_usd` in `tiers.json` — which is the general form of the "Kimi K3 (2× usage)"
+note in Go's catalogue.
+
+**Demand** comes from observed per-agent history in `opencode.db` (`GROUP BY agent, model`,
+read-only) where available, then declared `per_slot_tokens`, then a flat default labelled
+ESTIMATED in the report.
+
+**σ (default 0.8)** is applied to known capacity only, **never to null** — `null × 0.5 = null`
+would make an uncapped provider look infinitely attractive and concentrate load on the *least*
+trusted one.
+
+Slots that cannot fit anywhere are reported as **over-committed** and the run exits **3**. The
+config is still written (it is the best available) and the breach is detailed in the report, but a
+config that will blow your window never reports success.
+
+## Time-aware pricing
+
+DeepSeek moved to peak/off-peak pricing effective **16:00 UTC 2026-08-16**. This is a price
+*increase* with a peak surcharge, not an off-peak discount — V4-Flash output goes from a flat
+$0.28/Mtok to **$1.32 peak / $0.66 off-peak**; even off-peak is 2.4× the old rate.
+
+Peak windows: **01:00–04:00 and 06:00–10:00 UTC**.
+
+At peak, DeepSeek loses to GPT-5.6 Luna on *both* axes ($0.44/$1.32 vs $0.20/$1.20), so the solver
+substitutes automatically. Price resolves per `(provider, model)`, which captures the arbitrage
+that matters: **DeepSeek via opencode-go is a flat subscription and is never exposed to the
+surcharge**, while DeepSeek direct is.
+
+```bash
+plutus optimize --at 2026-08-17T02:00:00Z   # simulate peak
+plutus schedule                              # crontab lines for every boundary
+```
+
+`plutus schedule` emits four `CRON_TZ=UTC` entries so the config flips automatically.
 
 ## Safety & verification
 
@@ -650,28 +788,29 @@ The pinned SHA (sha256 of `dist/index.js`) is your audit trail — when omo's ch
 
 ## Limitations & roadmap
 
-**v1 scope (by design, per the adversarial review):**
+**Known gaps, stated plainly:**
 
-- **No budget enforcement.** v1 emits quality-optimal legal assignments and reports
-  projected consumption. Live budget coupling, shadow prices, and adaptive rebalancing are
-  **v2**, gated on SPIKE-06 (Go accounting) and the A1–A3 research questions.
-- **Go (opencode-go) capacity is UNVERIFIED** — see `spikes/SPIKE-06.md`. Until a real
-  billing source exists, Go is treated as overflow-only + 1× over-estimate + a loud warning.
-- **`plutus challenge` is a stub** — it pins the challenger and scaffolds the comparator,
-  but real session runs need the v2 session harness.
-- **`--mode=adaptive` refuses** (exit 3) until A1–A3 research questions are resolved.
-- **LOC note:** ~1,600 code lines vs the 1,560 hard stop — every over-budget line maps to a
-  required deliverable or patch surface (documented deviation, no slop).
-- **Per-agent attribution is read-only telemetry today**: `optimize` reads `opencode.db`
-  (SPIKE-02 RESOLVED) and reports per agent × model consumption, but the ledger still
-  records per-slot *assignments* + per-provider *quota snapshots* — the read is diagnostic,
-  not yet wired into budget coupling.
-
-**Roadmap (v2):** live budget coupling via the ledger's accumulated history + the
-token-history read, adaptive rebalancing + downgrade patches, the real challenger session
-harness, and Go tier accounting once SPIKE-06 is re-opened with real billing data.
-
----
+- **Unscored models are unassignable.** A model present in `models.json` but absent from
+  `tiers.json` is skipped. This is deliberate — assigning a model with no benchmark evidence would
+  be guessing — but it makes `tiers.json` the one file requiring ongoing maintenance as new models
+  ship.
+- **Silent capability collapse (B2).** If `~/.cache/opencode/models.json` is missing or corrupt,
+  a bare `catch` falls through to inventory-only availability and capability defaults flat.
+  Quality then degenerates to chain-position-only and the run still reports success. Needs a loud
+  banner plus a `--models-path` override.
+- **Zero-candidate providers are silent (B3).** A declared provider that contributes no candidates
+  produces no warning.
+- **Budget output is console-only.** `enforceBudget` returns `budgets`, `demoted` and
+  `overCommitted`, and `forecastBurn` returns projections; none are yet written into
+  `plutus-report.md`.
+- **`cap` is rarely discoverable.** Most providers do not expose remaining-quota fractions, so
+  headroom is usually assumed full — optimistic, and flagged at runtime.
+- **SPIKE-06 partially resolved.** Go's dollar denomination is now known and implemented; its
+  per-request tier floor is still unmeasured.
+- **Adaptive mode is a refusing stub.** The ledger (`history.jsonl`) accumulates from v1 so that
+  v2 starts with data rather than nothing.
+- **Chain drift.** Chains are pinned by sha256 and diffed against a vendored snapshot;
+  `check-chains` exits 3 on drift. Re-vendor deliberately after reviewing the delta.
 
 ## License
 

@@ -14,6 +14,9 @@ import { solveChains } from "../src/solver.ts";
 import { loadTiers } from "../src/quality.ts";
 import { extractChains, pinnedChainSha, installedOmoVersion, assertOmoVersion } from "../src/chain.ts";
 import { emitOmoConfig, loadPinnedSlots } from "../src/emitter.ts";
+import { enforceBudget, buildDemand, forecastBurn } from "../src/budget.ts";
+import { windowTokensMap, windowDollarsMap, windowResetsMap, demandProfile } from "../src/inventory.ts";
+import { pricingStatus, DEEPSEEK_SCHEDULE, cronLines, nextTransition, isPeak } from "../src/pricing.ts";
 import { renderReport } from "../src/report.ts";
 import { readTokenHistory } from "../src/tokens-history.ts";
 import { appendLedger, buildLedgerEntry } from "../src/ledger.ts";
@@ -54,6 +57,10 @@ interface SolveInputs {
   outputPath?: string;
   mode?: string;
   skipPinned?: string[];
+  /** Valuation instant — drives DeepSeek peak/off-peak. Defaults to now. */
+  at?: Date;
+  /** Cost-aversion base for value-seeking slots. */
+  costAversion?: number;
 }
 interface SolveResultBundle {
   solve: import("../src/types.ts").SolveResult;
@@ -63,6 +70,10 @@ interface SolveResultBundle {
   tiers: ReturnType<typeof loadTiers>;
   doctor: Awaited<ReturnType<typeof doctorSoftCheck>>;
   tokenHistory: ReturnType<typeof readTokenHistory>;
+  budget: ReturnType<typeof enforceBudget>;
+  burn: ReturnType<typeof forecastBurn>;
+  pricing: string;
+  demandSource: Record<string, string>;
 }
 async function runSolve(i: SolveInputs): Promise<SolveResultBundle> {
   const inventory = loadInventory(i.inventoryPath);
@@ -74,10 +85,38 @@ async function runSolve(i: SolveInputs): Promise<SolveResultBundle> {
   const availability = loadAvailability(inventory);
   const tiers = loadTiers();
   const pinned = i.skipPinned ?? loadPinnedSlots();
-  const solve = solveChains({ chains, availability, caps, tiers, skipPinned: pinned });
+  const at = i.at ?? new Date();
+  const solve = solveChains({
+    chains, availability, caps, tiers, skipPinned: pinned,
+    costAversion: i.costAversion ?? 0.35, at,
+  });
   const doctor = await doctorSoftCheck();
   const tokenHistory = readTokenHistory(i.dbPath);
-  return { solve, inventoryNames: Object.keys(inventory.providers), chainSha, installed, tiers, doctor, tokenHistory };
+
+  // CONSUMPTION LIMITS — this ran only in the CLI until now, so every config produced through the
+  // web UI was emitted with NO capacity constraint. The UI is the primary surface for this tool,
+  // so budget enforcement has to live in the shared solve path, not in one caller.
+  const observed = new Map<string, number>();
+  for (const r of tokenHistory.rows) {
+    observed.set(r.agent, (observed.get(r.agent) ?? 0) + r.inputTokens + r.outputTokens);
+  }
+  const profile = demandProfile(inventory);
+  const { demand, source: demandSource } = buildDemand(
+    solve.assignments.map((a) => a.slot), observed, profile.perSlot, profile.defaultTokens,
+  );
+  const budget = enforceBudget(solve.assignments, {
+    windowTokens: windowTokensMap(inventory), windowDollars: windowDollarsMap(inventory),
+    caps, demand, sigma: profile.sigma,
+  });
+  if (budget.enforced) solve.assignments = budget.assignments;
+  const burn = forecastBurn(budget.budgets, observed, profile.observedSpanHours, windowResetsMap(inventory));
+  const pricing = pricingStatus(at);
+
+  return {
+    solve, inventoryNames: Object.keys(inventory.providers), chainSha, installed, tiers, doctor,
+    tokenHistory, budget, burn, pricing,
+    demandSource: Object.fromEntries(demandSource),
+  };
 }
 function bundleReportData(b: SolveResultBundle, mode: string, opts: { schemaId?: string; trustLevels?: Record<string, string> } = {}) {
   return {
@@ -166,9 +205,18 @@ const server = serve({
       if (method === "GET" && p === "/api/solve/preview") {
         const inventoryPath = str(url.searchParams.get("config"), resolveInventoryPath());
         const dbPath = str(url.searchParams.get("db-path"), resolveOpencodeDbPath());
-        const b = await runSolve({ inventoryPath, dbPath });
+        // `at` lets the UI simulate DeepSeek peak vs off-peak without waiting for the clock.
+        const atRaw = url.searchParams.get("at");
+        const at = atRaw ? new Date(atRaw) : undefined;
+        if (atRaw && Number.isNaN(at!.getTime())) throw new PlutusError(`invalid \`at\` timestamp: ${atRaw}`, EXIT.VALIDATION);
+        const caRaw = url.searchParams.get("cost-aversion");
+        const b = await runSolve({ inventoryPath, dbPath, at, costAversion: caRaw ? Number(caRaw) : undefined });
         const report = renderReport(b.solve, b.inventoryNames, bundleReportData(b, "absolute-best"));
-        return json({ assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted, skippedPinned: b.solve.skippedPinned, report });
+        return json({
+          assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted,
+          skippedPinned: b.solve.skippedPinned, report,
+          budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource,
+        });
       }
 
       if (method === "GET" && p === "/api/chains") {
@@ -222,6 +270,22 @@ const server = serve({
         return json({ path: out, content: existsSync(out) ? readFileSync(out, "utf8") : null });
       }
 
+      // Pricing schedule — the UI needs to show peak/off-peak state and offer the cron lines.
+      if (method === "GET" && p === "/api/pricing") {
+        const now = new Date();
+        const inventoryPath = str(url.searchParams.get("config"), resolveInventoryPath());
+        const cmd = `cd ${process.cwd()} && bun run src/cli/index.ts optimize --config ${inventoryPath} >> /tmp/plutus-cron.log 2>&1`;
+        return json({
+          status: pricingStatus(now),
+          peakNow: isPeak(DEEPSEEK_SCHEDULE, now),
+          effectiveFrom: DEEPSEEK_SCHEDULE.effectiveFrom,
+          windows: DEEPSEEK_SCHEDULE.windows,
+          nextTransition: nextTransition(DEEPSEEK_SCHEDULE, now).toISOString(),
+          sourceUrl: DEEPSEEK_SCHEDULE.sourceUrl,
+          cron: cronLines(DEEPSEEK_SCHEDULE, cmd),
+        });
+      }
+
       if (method === "GET" && p === "/api/schema") {
         return json(schemaInfo());
       }
@@ -264,7 +328,13 @@ const server = serve({
             appendLedger(buildLedgerEntry(b.solve, capMap(inventory), trustLevels, b.chainSha, mode));
           }
           const report = renderReport(b.solve, b.inventoryNames, bundleReportData(b, mode, { trustLevels }));
-          return { solve: { assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted, skippedPinned: b.solve.skippedPinned }, emit, document, report, doctor: b.doctor, tokenHistory: b.tokenHistory };
+          return {
+            solve: { assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted, skippedPinned: b.solve.skippedPinned },
+            emit, document, report, doctor: b.doctor, tokenHistory: b.tokenHistory,
+            // Budget + pricing surfaced so the UI can show WHY a slot was demoted, and warn when
+            // consumption limits are not being enforced at all.
+            budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource,
+          };
         }));
       }
 
@@ -340,4 +410,4 @@ const server = serve({
 });
 
 console.log(`[plutus-ui] serving on http://localhost:${server.port}`);
-console.log(`[plutus-ui] API: /api/status, /api/solve/preview, /api/optimize, /api/discover, /api/chains, /api/token-history, /api/ledger, /api/inventory, /api/pinned, /api/tiers, /api/models, /api/report, /api/config, /api/schema, /api/rollback, /api/challenge`);
+console.log(`[plutus-ui] API: /api/status, /api/solve/preview, /api/optimize, /api/discover, /api/chains, /api/token-history, /api/ledger, /api/inventory, /api/pinned, /api/tiers, /api/models, /api/report, /api/config, /api/schema, /api/rollback, /api/challenge, /api/pricing`);

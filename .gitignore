@@ -1,7 +1,15 @@
 node_modules/
 dist/
-.omo/
-.codegraph/
-*.tsbuildinfo
-spikes/
-.plutus-lock
+.DS_Store
+
+# Local operator scripts and troubleshooting artifacts — machine-specific, not part of the tool.
+plutus-setup.sh
+plutus-inventory.sh
+plutus-fix-inventory.sh
+plutus-cron.sh
+omo-plutus-fixes.patch
+scripts/prune-inventory.ts
+*.bak
+*.bak.*
+inventory.yaml.preprune.bak
+plutus-challenge.md
