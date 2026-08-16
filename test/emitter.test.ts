@@ -82,25 +82,27 @@ test("S4: buildConfig preserves user keys, replaces optimizer-owned keys, skips 
   const config = buildConfig(assignments, EXISTING);
 
   const oracle = (config.agents as Record<string, Record<string, unknown>>).oracle!;
-  expect(oracle.model).toBe("gpt-5.6-sol"); // replaced (optimizer-owned)
+  expect(oracle.model).toBe("openai/gpt-5.6-sol"); // replaced (optimizer-owned)
   expect(oracle.prompt).toBe("you are the oracle — user-authored prompt, must survive merge"); // preserved
   expect(oracle.tools).toEqual({ bash: true, read: true });
   expect(oracle.description).toBe("user description");
   expect(oracle.mode).toBe("primary");
-  expect(oracle.fallback_models).toEqual([{ model: "gpt-5.5" }]); // replaced (optimizer-owned)
+  expect(oracle.fallback_models).toEqual([{ model: "openai/gpt-5.5" }]); // replaced + provider-qualified
 
   // Non-optimizer slot untouched.
   const build = (config.agents as Record<string, Record<string, unknown>>).build!;
-  expect(build.model).toBe("deepseek-v4-flash");
+  expect(build.model).toBe("deepseek-v4-flash"); // untouched — qualification applies only to slots the optimizer owns
   // Pinned slot skipped by the solver → not in assignments → existing entry untouched.
   const hephaestus = (config.agents as Record<string, Record<string, unknown>>).hephaestus!;
+  // Pinned: NOT in assignments, so the user's entry passes through byte-for-byte — including an
+  // unqualified id. Qualification applies only to slots the optimizer actually writes.
   expect(hephaestus.model).toBe("gpt-5.6-sol");
   expect(hephaestus.prompt).toBe("pinned slot prompt");
 
   const ultra = (config.categories as Record<string, Record<string, unknown>>).ultrabrain!;
-  expect(ultra.model).toBe("gpt-5.6-sol");
+  expect(ultra.model).toBe("openai/gpt-5.6-sol");
   expect(ultra.prompt_append).toBe("user prompt_append");
-  expect(ultra.models).toEqual([{ model: "gpt-5.5" }]); // categories emit `models` — replaced, not appended
+  expect(ultra.models).toEqual([{ model: "openai/gpt-5.5" }]); // categories emit `models` — replaced + provider-qualified
 
   expect(config.telemetry).toBe(true); // top-level user key preserved
 
@@ -115,7 +117,7 @@ test("S4: emitConfig with merge replaces the target, backs it up, and the result
   expect(backupPath).not.toBeNull();
   const emitted = JSON.parse(readFileSync(cfgPath, "utf8"));
   const oracle = (emitted.agents as Record<string, Record<string, unknown>>).oracle!;
-  expect(oracle.model).toBe("gpt-5.6-sol");
+  expect(oracle.model).toBe("openai/gpt-5.6-sol");
   expect(oracle.prompt).toBe("you are the oracle — user-authored prompt, must survive merge");
   expect((emitted.agents as Record<string, unknown>).build).toBeDefined(); // still there
   expect(validateConfig(emitted).valid).toBe(true);
@@ -192,7 +194,7 @@ test("omo.jsonc: buildOmoConfig wraps assignments in { $schema, [opencode] } and
   expect((doc as any).codegraph).toEqual({ telemetry: true }); // preserved
   expect((doc as any).team_mode_should_not_survive).toBeUndefined(); // dropped
   const inner = (doc as any)["[opencode]"];
-  expect(inner.agents.oracle.model).toBe("gpt-5.6-sol");
+  expect(inner.agents.oracle.model).toBe("openai/gpt-5.6-sol");
   expect(inner.agents.build.model).toBe("x"); // user key preserved via buildConfig merge
   expect((doc as any)["[opencode]"].categories).toBeDefined();
 });
@@ -215,7 +217,7 @@ test("omo.jsonc: emitOmoConfig writes the wrapped doc + backup, and the [opencod
   expect(backupPath).toContain(".bak.");
   const written = JSON.parse(readFileSync(target, "utf8"));
   expect(written.$schema).toBe(OMO_SCHEMA_URL);
-  expect(written["[opencode]"].agents.oracle.model).toBe("gpt-5.6-sol");
+  expect(written["[opencode]"].agents.oracle.model).toBe("openai/gpt-5.6-sol");
   expect(written["[opencode]"].agents.build.model).toBe("old"); // merged, preserved
   // backup contains the pre-merge doc
   const backup = JSON.parse(readFileSync(backupPath!, "utf8"));
@@ -256,4 +258,30 @@ test("omo.jsonc: readOmoConfig parses a LIVE-SHAPED config (comments + trailing 
   const oc = (doc["[opencode]"] ?? doc) as Record<string, unknown>;
   expect((oc.agents as Record<string, unknown>).sisyphus).toBeDefined();
   expect((oc.categories as Record<string, unknown>)["visual-engineering"]).toBeDefined();
+});
+
+test("model ids are QUALIFIED with their provider (provider/model)", () => {
+  // OMO addresses models as `provider/model` — the live config reads `openai/gpt-5.6-sol`.
+  // Emitting a bare id drops the provider the solver chose, so OpenCode resolves it by its own
+  // rules: wrong provider, or one with no credentials, surfacing as "invalid API key". It also
+  // makes ambiguous ids unresolvable — deepseek-v4-flash exists on BOTH opencode-go and the
+  // direct DeepSeek subscription with completely different economics.
+  const asg = [{
+    slot: "sisyphus", kind: "agent" as const,
+    primary: { provider: "opencode-go", model: "kimi-k3", variant: "max",
+      fit: 1, capability: 0.9, quality: 0.9, projectedCost: 0, quotaHeadroom: 1, trusted: true,
+      entry: { providers: ["opencode-go"], model: "kimi-k3", position: 0 } },
+    fallbacks: [{ provider: "deepseek", model: "deepseek-v4-flash",
+      fit: 0.9, capability: 0.8, quality: 0.72, projectedCost: 0, quotaHeadroom: 1, trusted: true,
+      entry: { providers: ["deepseek"], model: "deepseek-v4-flash", position: 1 } }],
+    rationale: "",
+  }] as unknown as Parameters<typeof buildConfig>[0];
+
+  const cfg = buildConfig(asg) as any;
+  expect(cfg.agents.sisyphus.model).toBe("opencode-go/kimi-k3");
+  expect(cfg.agents.sisyphus.fallback_models[0].model).toBe("deepseek/deepseek-v4-flash");
+  // Already-qualified ids pass through unchanged (idempotent).
+  const asg2 = JSON.parse(JSON.stringify(asg));
+  asg2[0].primary.model = "openai/gpt-5.6-sol";
+  expect((buildConfig(asg2) as any).agents.sisyphus.model).toBe("openai/gpt-5.6-sol");
 });

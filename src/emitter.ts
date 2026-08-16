@@ -57,6 +57,22 @@ export function loadPinnedSlots(path: string = pinnedSidecarPath()): string[] {
   return [];
 }
 
+/**
+ * Qualify a model id with its provider: `provider/model`.
+ *
+ * OMO addresses models as `provider/model` (the live config reads `openai/gpt-5.6-sol`). Emitting a
+ * bare id drops the provider the solver actually chose, and OpenCode then resolves it by its own
+ * rules — landing on a different provider than intended, or one with no credentials, which surfaces
+ * as "invalid API key". It also makes genuinely ambiguous ids unresolvable: `deepseek-v4-flash`
+ * exists on BOTH opencode-go and the direct DeepSeek subscription, with completely different
+ * economics.
+ *
+ * Ids that already carry a provider are passed through unchanged.
+ */
+function qualify(provider: string, model: string): string {
+  return model.includes("/") ? model : `${provider}/${model}`;
+}
+
 /** Serialize one fallback entry the way the schema expects ({ model, variant? }). */
 function fallbackEntry(model: string, variant?: string): Record<string, unknown> {
   return variant ? { model, variant } : { model };
@@ -73,10 +89,10 @@ export function buildConfig(assignments: Assignment[], existing?: Record<string,
     const slots = (config[section] ?? {}) as Record<string, unknown>;
     const prev = (slots[a.slot] ?? {}) as Record<string, unknown>;
     const merged: Record<string, unknown> = Object.fromEntries(Object.entries(prev).filter(([k]) => !OWNED_KEYS.has(k)));
-    merged.model = a.primary.model;
+    merged.model = qualify(a.primary.provider, a.primary.model);
     if (a.primary.variant) merged.variant = a.primary.variant;
     const fbKey = a.kind === "agent" ? "fallback_models" : "models";
-    merged[fbKey] = a.fallbacks.slice(0, FALLBACK_CAP).map((c) => fallbackEntry(c.model, c.variant));
+    merged[fbKey] = a.fallbacks.slice(0, FALLBACK_CAP).map((c) => fallbackEntry(qualify(c.provider, c.model), c.variant));
 
     slots[a.slot] = merged; config[section] = slots;
   }
