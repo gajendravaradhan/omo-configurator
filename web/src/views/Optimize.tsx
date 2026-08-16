@@ -59,7 +59,17 @@ export function OptimizeView() {
     }
   }
 
-  const shown = result ?? (preview.data ? { solve: preview.data, report: preview.data.report, doctor: { ran: false, notes: [] }, tokenHistory: { available: false, rows: [], dbPath: "" }, emit: null, document: null } : null);
+  const shown = result ?? (preview.data ? {
+    solve: preview.data,
+    report: preview.data.report,
+    doctor: { ran: false, notes: [] },
+    tokenHistory: { available: false, rows: [], dbPath: "" },
+    emit: null, document: null,
+    // Budget/burn/pricing live at the TOP level of the preview response, not under `solve`.
+    // Omitting them here left `shown.budget` undefined, so the Consumption panel's
+    // `empty={!shown?.budget}` never cleared and the spinner ran forever.
+    budget: preview.data.budget, burn: preview.data.burn, pricing: preview.data.pricing,
+  } : null);
 
   return (
     <>
@@ -98,7 +108,7 @@ export function OptimizeView() {
           ) : undefined
         }
       >
-        <PanelStates loading={preview.loading || busy !== null} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown} emptyText="Run a preview or optimize to see assignments">
+        <PanelStates loading={preview.loading} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown} emptyText="Run a preview or optimize to see assignments">
           {shown && (
             <DataTable headers={["slot", "kind", "primary model", "provider", "fit", "capability", "quality", "trusted", "binding"]}>
               {shown.solve.assignments.map((a) => (
@@ -131,7 +141,7 @@ export function OptimizeView() {
           </div>
         ) : undefined}
       >
-        <PanelStates loading={preview.loading || busy !== null} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown?.budget} emptyText="Run a preview or optimize to see budget">
+        <PanelStates loading={preview.loading} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown?.budget} emptyText="Run a preview or optimize to see budget">
           {shown?.budget && (
             <>
               {shown.pricing && <p className="body-sm text-secondary">{shown.pricing}</p>}
