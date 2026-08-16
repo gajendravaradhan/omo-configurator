@@ -13,3 +13,5 @@ scripts/prune-inventory.ts
 *.bak.*
 inventory.yaml.preprune.bak
 plutus-challenge.md
+
+omo-plutus-fixes*.patch
