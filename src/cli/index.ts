@@ -25,6 +25,7 @@ export const optimizeCommand = defineCommand({
     "no-merge": { type: "boolean", default: false, description: "Do not deep-merge into existing config (emit fresh)" },
       "cost-aversion": { type: "string", description: "0 = pure quality; higher prefers cheap capability on high-volume slots (default 0.35)" },
       "at": { type: "string", description: "Valuate at this ISO instant instead of now (simulates DeepSeek peak/off-peak)" },
+      "models-path": { type: "string", description: "Override ~/.cache/opencode/models.json (use when the default cache is missing or corrupt)" },
   },
   run: async (ctx) => {
     return optimize({
@@ -34,6 +35,7 @@ export const optimizeCommand = defineCommand({
       dbPath: resolveOpencodeDbPath(ctx.args["db-path"]),
       merge: !ctx.args["no-merge"], costAversion: ctx.args["cost-aversion"] !== undefined ? Number(ctx.args["cost-aversion"]) : undefined,
       at: ctx.args["at"] ? new Date(String(ctx.args["at"])) : undefined,
+      modelsPath: ctx.args["models-path"] ? String(ctx.args["models-path"]) : undefined,
     });
   },
 });

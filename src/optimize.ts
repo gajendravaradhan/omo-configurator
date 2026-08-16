@@ -4,7 +4,7 @@
 import { dirname, join } from "node:path";
 import { extractChains, assertOmoVersion, installedOmoVersion, pinnedChainSha, PROBED_OMO_VERSION } from "./chain.ts";
 import { loadInventory, capMap } from "./inventory.ts";
-import { loadAvailability } from "./availability.ts";
+import { loadAvailability, availabilityDiagnostics } from "./availability.ts";
 import { solveChains } from "./solver.ts";
 import { loadTiers } from "./quality.ts";
 import { emitConfig, emitOmoConfig, loadPinnedSlots } from "./emitter.ts";
@@ -23,6 +23,8 @@ export interface OptimizeArgs {
   inventoryPath: string; mode: "absolute-best" | "adaptive"; outputPath: string; dbPath: string; merge: boolean;
   /** 0 = pure quality; higher prefers cheap capability on value-seeking slots. Default 0.35. */
   costAversion?: number;
+  /** Override the models.json path (B2 — lets you point at a good cache when the default is bad). */
+  modelsPath?: string;
   /** Valuation instant (ISO). Drives DeepSeek peak/off-peak. Defaults to now. */
   at?: Date;
 }
@@ -42,13 +44,29 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
   // P8 startup check: emit-shape decision was made against a probed omo version.
   const installed = installedOmoVersion(); assertOmoVersion(installed); const chainSha = pinnedChainSha();
 
-  const chains = extractChains(); const availability = loadAvailability(inventory); const tiers = loadTiers();
+  const chains = extractChains(); const availability = loadAvailability(inventory, args.modelsPath); const tiers = loadTiers();
   // W4.2: pinned slots from the sidecar are skipped by the solver and never touched by the merge.
   const tokenHistoryEarly = readTokenHistory(args.dbPath);
   const pinned = loadPinnedSlots(); const solve = solveChains({ chains, availability, caps, tiers, skipPinned: pinned, costAversion: args.costAversion ?? 0.35, at: args.at ?? new Date() }); const allUntrusted = solve.allUntrusted;
 
   // P8: emit-shape decision note — printed once per run; agent fallback_models is schema-forced and
   // config migrate (omo v4.19.4, VERIFIED 2026-08-07) emits NO deprecation warning for it.
+  // B2/B3 — a degraded catalogue silently flattens capability, so it is reported before anything else.
+  const diag = availabilityDiagnostics();
+  if (diag?.degraded) {
+    console.warn(`[availability] DEGRADED: models.json ${diag.source} at ${diag.modelsPath}` +
+      (diag.error ? ` (${diag.error})` : ""));
+    console.warn("[availability] Capability cannot be differentiated without it — every model falls back " +
+      "to a default score and assignments collapse to chain-position-only. Run `opencode models` to " +
+      "rebuild the cache, or pass --models-path <file>.");
+  } else if (diag) {
+    console.log(`[availability] models.json loaded: ${diag.modelCount} models across ${diag.providerCount} provider(s)`);
+  }
+  if (diag?.emptyProviders.length) {
+    console.warn(`[availability] declared provider(s) with NO catalogue entry — they contribute zero ` +
+      `candidates and will never be assigned: ${diag.emptyProviders.join(", ")}. ` +
+      `Check the provider id matches what \`opencode models\` reports.`);
+  }
   console.log(`[pricing] ${pricingStatus(args.at ?? new Date())}`);
   console.log(`[plutus] emit-shape: agents->fallback_models (schema-forced; omo v${PROBED_OMO_VERSION} config migrate accepts, no deprecation warning emitted)`);
 

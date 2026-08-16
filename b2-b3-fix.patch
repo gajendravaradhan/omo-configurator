@@ -1,0 +1,312 @@
+diff --git a/server/index.ts b/server/index.ts
+index 3551fbd..27aff70 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -15,6 +15,7 @@ import { loadTiers } from "../src/quality.ts";
+ import { extractChains, pinnedChainSha, installedOmoVersion, assertOmoVersion } from "../src/chain.ts";
+ import { emitOmoConfig, loadPinnedSlots } from "../src/emitter.ts";
+ import { enforceBudget, buildDemand, forecastBurn } from "../src/budget.ts";
++import { availabilityDiagnostics } from "../src/availability.ts";
+ import { windowTokensMap, windowDollarsMap, windowResetsMap, demandProfile } from "../src/inventory.ts";
+ import { pricingStatus, DEEPSEEK_SCHEDULE, cronLines, nextTransition, isPeak } from "../src/pricing.ts";
+ import { renderReport } from "../src/report.ts";
+@@ -71,6 +72,7 @@ interface SolveResultBundle {
+   doctor: Awaited<ReturnType<typeof doctorSoftCheck>>;
+   tokenHistory: ReturnType<typeof readTokenHistory>;
+   budget: ReturnType<typeof enforceBudget>;
++  availability: ReturnType<typeof availabilityDiagnostics>;
+   burn: ReturnType<typeof forecastBurn>;
+   pricing: string;
+   demandSource: Record<string, string>;
+@@ -115,6 +117,7 @@ async function runSolve(i: SolveInputs): Promise<SolveResultBundle> {
+   return {
+     solve, inventoryNames: Object.keys(inventory.providers), chainSha, installed, tiers, doctor,
+     tokenHistory, budget, burn, pricing,
++    availability: availabilityDiagnostics(),
+     demandSource: Object.fromEntries(demandSource),
+   };
+ }
+@@ -215,7 +218,7 @@ const server = serve({
+         return json({
+           assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted,
+           skippedPinned: b.solve.skippedPinned, report,
+-          budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource,
++          budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource, availability: b.availability,
+         });
+       }
+ 
+@@ -333,7 +336,7 @@ const server = serve({
+             emit, document, report, doctor: b.doctor, tokenHistory: b.tokenHistory,
+             // Budget + pricing surfaced so the UI can show WHY a slot was demoted, and warn when
+             // consumption limits are not being enforced at all.
+-            budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource,
++            budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource, availability: b.availability,
+           };
+         }));
+       }
+diff --git a/src/availability.ts b/src/availability.ts
+index 9d76549..6455e55 100644
+--- a/src/availability.ts
++++ b/src/availability.ts
+@@ -104,25 +104,67 @@ export function availabilityFromModelsFile(path: string): {
+ }
+ 
+ /** Build Availability from models.json + inventory-declared providers. */
++/**
++ * B2 — how the models cache was read, surfaced so a degraded run is never silent.
++ *
++ * When models.json is missing or corrupt, every model falls back to a default capability and the
++ * quality model collapses to a constant: assignments degenerate to chain-position-only while the
++ * run still reports success. That is the single most dangerous failure mode in this tool, because
++ * the output looks entirely normal. Callers MUST surface `degraded`.
++ */
++export interface AvailabilityDiagnostics {
++  modelsPath: string;
++  /** "loaded" = real catalogue; "missing"/"corrupt" = capability is a constant. */
++  source: "loaded" | "missing" | "corrupt";
++  degraded: boolean;
++  providerCount: number;
++  modelCount: number;
++  error?: string;
++  /** B3 — declared providers that contributed ZERO usable candidates. */
++  emptyProviders: string[];
++}
++
++let lastDiagnostics: AvailabilityDiagnostics | null = null;
++export function availabilityDiagnostics(): AvailabilityDiagnostics | null {
++  return lastDiagnostics;
++}
++
+ export function loadAvailability(inventory: Inventory, modelsPathOverride?: string): Availability {
+   const modelsByProvider = new Map<string, Set<string>>();
+   const metaByProvider = new Map<string, Map<string, ModelMeta>>();
+   const modelsPath = modelsPathOverride ?? modelsCachePath();
++  let source: AvailabilityDiagnostics["source"] = "missing";
++  let error: string | undefined;
+   if (existsSync(modelsPath)) {
+     try {
+       const { modelsByProvider: models, metaByProvider: metas } = availabilityFromModelsFile(modelsPath);
+       for (const [pid, set] of models) modelsByProvider.set(pid, set);
+       for (const [pid, meta] of metas) metaByProvider.set(pid, meta);
+-    } catch {
+-      // Corrupt/missing cache → fall through to inventory-only availability (report notes this).
++      source = "loaded";
++    } catch (e) {
++      // NOT silent: a corrupt cache degrades every downstream score, so it is recorded and reported.
++      source = "corrupt";
++      error = (e as Error).message;
+     }
+   }
+   // Inventory-declared providers are usable even without a models.json hit (empty set = any model).
++  const emptyProviders: string[] = [];
+   for (const pid of Object.keys(inventory.providers)) {
+     if (!modelsByProvider.has(pid)) {
+       modelsByProvider.set(pid, new Set<string>()); metaByProvider.set(pid, new Map<string, ModelMeta>());
++      // B3: a declared provider with no catalogue entry contributes no scored candidates. This is
++      // how DeepSeek injection used to no-op in total silence — the provider was declared and paid
++      // for, yet never appeared in a single slot.
++      emptyProviders.push(pid);
+     }
+   }
++
++  let modelCount = 0;
++  for (const set of modelsByProvider.values()) modelCount += set.size;
++  lastDiagnostics = {
++    modelsPath, source, degraded: source !== "loaded",
++    providerCount: modelsByProvider.size, modelCount, error, emptyProviders,
++  };
+   // Gate on inventory: only declared providers are selectable.
+   return new Availability(modelsByProvider, metaByProvider, new Set(Object.keys(inventory.providers)));
+ }
+diff --git a/src/cli/index.ts b/src/cli/index.ts
+index b49b56b..06b6d7e 100644
+--- a/src/cli/index.ts
++++ b/src/cli/index.ts
+@@ -25,6 +25,7 @@ export const optimizeCommand = defineCommand({
+     "no-merge": { type: "boolean", default: false, description: "Do not deep-merge into existing config (emit fresh)" },
+       "cost-aversion": { type: "string", description: "0 = pure quality; higher prefers cheap capability on high-volume slots (default 0.35)" },
+       "at": { type: "string", description: "Valuate at this ISO instant instead of now (simulates DeepSeek peak/off-peak)" },
++      "models-path": { type: "string", description: "Override ~/.cache/opencode/models.json (use when the default cache is missing or corrupt)" },
+   },
+   run: async (ctx) => {
+     return optimize({
+@@ -34,6 +35,7 @@ export const optimizeCommand = defineCommand({
+       dbPath: resolveOpencodeDbPath(ctx.args["db-path"]),
+       merge: !ctx.args["no-merge"], costAversion: ctx.args["cost-aversion"] !== undefined ? Number(ctx.args["cost-aversion"]) : undefined,
+       at: ctx.args["at"] ? new Date(String(ctx.args["at"])) : undefined,
++      modelsPath: ctx.args["models-path"] ? String(ctx.args["models-path"]) : undefined,
+     });
+   },
+ });
+diff --git a/src/optimize.ts b/src/optimize.ts
+index af8350e..f0b52e3 100644
+--- a/src/optimize.ts
++++ b/src/optimize.ts
+@@ -4,7 +4,7 @@
+ import { dirname, join } from "node:path";
+ import { extractChains, assertOmoVersion, installedOmoVersion, pinnedChainSha, PROBED_OMO_VERSION } from "./chain.ts";
+ import { loadInventory, capMap } from "./inventory.ts";
+-import { loadAvailability } from "./availability.ts";
++import { loadAvailability, availabilityDiagnostics } from "./availability.ts";
+ import { solveChains } from "./solver.ts";
+ import { loadTiers } from "./quality.ts";
+ import { emitConfig, emitOmoConfig, loadPinnedSlots } from "./emitter.ts";
+@@ -23,6 +23,8 @@ export interface OptimizeArgs {
+   inventoryPath: string; mode: "absolute-best" | "adaptive"; outputPath: string; dbPath: string; merge: boolean;
+   /** 0 = pure quality; higher prefers cheap capability on value-seeking slots. Default 0.35. */
+   costAversion?: number;
++  /** Override the models.json path (B2 — lets you point at a good cache when the default is bad). */
++  modelsPath?: string;
+   /** Valuation instant (ISO). Drives DeepSeek peak/off-peak. Defaults to now. */
+   at?: Date;
+ }
+@@ -42,13 +44,29 @@ export async function optimize(args: OptimizeArgs): Promise<void> {
+   // P8 startup check: emit-shape decision was made against a probed omo version.
+   const installed = installedOmoVersion(); assertOmoVersion(installed); const chainSha = pinnedChainSha();
+ 
+-  const chains = extractChains(); const availability = loadAvailability(inventory); const tiers = loadTiers();
++  const chains = extractChains(); const availability = loadAvailability(inventory, args.modelsPath); const tiers = loadTiers();
+   // W4.2: pinned slots from the sidecar are skipped by the solver and never touched by the merge.
+   const tokenHistoryEarly = readTokenHistory(args.dbPath);
+   const pinned = loadPinnedSlots(); const solve = solveChains({ chains, availability, caps, tiers, skipPinned: pinned, costAversion: args.costAversion ?? 0.35, at: args.at ?? new Date() }); const allUntrusted = solve.allUntrusted;
+ 
+   // P8: emit-shape decision note — printed once per run; agent fallback_models is schema-forced and
+   // config migrate (omo v4.19.4, VERIFIED 2026-08-07) emits NO deprecation warning for it.
++  // B2/B3 — a degraded catalogue silently flattens capability, so it is reported before anything else.
++  const diag = availabilityDiagnostics();
++  if (diag?.degraded) {
++    console.warn(`[availability] DEGRADED: models.json ${diag.source} at ${diag.modelsPath}` +
++      (diag.error ? ` (${diag.error})` : ""));
++    console.warn("[availability] Capability cannot be differentiated without it — every model falls back " +
++      "to a default score and assignments collapse to chain-position-only. Run `opencode models` to " +
++      "rebuild the cache, or pass --models-path <file>.");
++  } else if (diag) {
++    console.log(`[availability] models.json loaded: ${diag.modelCount} models across ${diag.providerCount} provider(s)`);
++  }
++  if (diag?.emptyProviders.length) {
++    console.warn(`[availability] declared provider(s) with NO catalogue entry — they contribute zero ` +
++      `candidates and will never be assigned: ${diag.emptyProviders.join(", ")}. ` +
++      `Check the provider id matches what \`opencode models\` reports.`);
++  }
+   console.log(`[pricing] ${pricingStatus(args.at ?? new Date())}`);
+   console.log(`[plutus] emit-shape: agents->fallback_models (schema-forced; omo v${PROBED_OMO_VERSION} config migrate accepts, no deprecation warning emitted)`);
+ 
+diff --git a/test/availability-diagnostics.test.ts b/test/availability-diagnostics.test.ts
+new file mode 100644
+index 0000000..0802855
+--- /dev/null
++++ b/test/availability-diagnostics.test.ts
+@@ -0,0 +1,47 @@
++import { test, expect } from "bun:test";
++import { loadAvailability, availabilityDiagnostics } from "../src/availability.ts";
++import { loadInventory } from "../src/inventory.ts";
++import { writeFileSync, mkdtempSync } from "node:fs";
++import { join } from "node:path";
++import { tmpdir } from "node:os";
++
++const inv = () => loadInventory(join(import.meta.dir, "fixtures", "w2", "inventory.yaml"));
++
++test("B2: MISSING models.json is reported as degraded, never silent", () => {
++  // The dangerous case: capability collapses to a constant, quality degenerates to
++  // chain-position-only, and the run still reports success. It must be loud.
++  loadAvailability(inv(), "/nonexistent/models.json");
++  const d = availabilityDiagnostics()!;
++  expect(d.source).toBe("missing");
++  expect(d.degraded).toBe(true);
++  expect(d.modelsPath).toBe("/nonexistent/models.json");
++});
++
++test("B2: CORRUPT models.json is reported as corrupt WITH the parse error", () => {
++  const dir = mkdtempSync(join(tmpdir(), "plutus-avail-"));
++  const bad = join(dir, "models.json");
++  writeFileSync(bad, "{ not valid json");
++  loadAvailability(inv(), bad);
++  const d = availabilityDiagnostics()!;
++  expect(d.source).toBe("corrupt");
++  expect(d.degraded).toBe(true);
++  expect(d.error).toBeTruthy();   // the parse failure is preserved, not swallowed
++});
++
++test("B3: declared providers contributing ZERO candidates are named", () => {
++  // This is how DeepSeek injection used to no-op in total silence — a provider declared and
++  // paid for, present in inventory, yet contributing nothing to any slot.
++  loadAvailability(inv(), "/nonexistent/models.json");
++  const d = availabilityDiagnostics()!;
++  expect(d.emptyProviders.length).toBeGreaterThan(0);
++  for (const pid of d.emptyProviders) expect(typeof pid).toBe("string");
++});
++
++test("B2: a healthy cache reports loaded, not degraded", () => {
++  const good = join(import.meta.dir, "fixtures", "w2", "models.json");
++  loadAvailability(inv(), good);
++  const d = availabilityDiagnostics()!;
++  expect(d.source).toBe("loaded");
++  expect(d.degraded).toBe(false);
++  expect(d.modelCount).toBeGreaterThan(0);
++});
+diff --git a/web/src/api.ts b/web/src/api.ts
+index 65faf44..c7d1b5d 100644
+--- a/web/src/api.ts
++++ b/web/src/api.ts
+@@ -77,6 +77,11 @@ export interface PricingInfo {
+   nextTransition: string; sourceUrl: string; cron: string[];
+ }
+ 
++export interface AvailabilityDiagnostics {
++  modelsPath: string; source: "loaded" | "missing" | "corrupt"; degraded: boolean;
++  providerCount: number; modelCount: number; error?: string; emptyProviders: string[];
++}
++
+ export interface SolvePreview {
+   assignments: Array<{
+     slot: string;
+@@ -86,6 +91,7 @@ export interface SolvePreview {
+   burn?: BurnForecast[];
+   pricing?: string;
+   demandSource?: Record<string, string>;
++  availability?: AvailabilityDiagnostics;
+ };
+     fallbacks: Array<{ model: string; provider: string; fit: number }>;
+     rationale: string;
+diff --git a/web/src/views/Optimize.tsx b/web/src/views/Optimize.tsx
+index b4e0cb2..a0dba50 100644
+--- a/web/src/views/Optimize.tsx
++++ b/web/src/views/Optimize.tsx
+@@ -7,6 +7,7 @@ import { Badge, CodeBlock, DataTable, MonoChip, Panel, PanelStates, RunButton, T
+ interface OptimizeResult {
+   solve: { assignments: SolvePreview["assignments"]; allUntrusted: boolean; skippedPinned: string[] };
+   budget?: SolvePreview["budget"];
++  availability?: SolvePreview["availability"];
+   burn?: SolvePreview["burn"];
+   pricing?: string;
+   emit: { configPath: string; backupPath: string | null } | null;
+@@ -69,6 +70,7 @@ export function OptimizeView() {
+     // Omitting them here left `shown.budget` undefined, so the Consumption panel's
+     // `empty={!shown?.budget}` never cleared and the spinner ran forever.
+     budget: preview.data.budget, burn: preview.data.burn, pricing: preview.data.pricing,
++    availability: preview.data.availability,
+   } : null);
+ 
+   return (
+@@ -109,6 +111,21 @@ export function OptimizeView() {
+         }
+       >
+         <PanelStates loading={preview.loading} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown} emptyText="Run a preview or optimize to see assignments">
++          {shown?.availability?.degraded && (
++            <p className="body-sm" style={{ marginBottom: 12 }}>
++              <strong>Model catalogue {shown.availability.source}</strong> at <code>{shown.availability.modelsPath}</code>
++              {shown.availability.error ? ` — ${shown.availability.error}` : ""}. Capability cannot be
++              differentiated without it: every model falls back to a default score and assignments
++              collapse to chain-position-only. Run <code>opencode models</code> to rebuild the cache.
++            </p>
++          )}
++          {(shown?.availability?.emptyProviders?.length ?? 0) > 0 && (
++            <p className="body-sm" style={{ marginBottom: 12 }}>
++              <strong>Providers with no catalogue entry:</strong> {shown!.availability!.emptyProviders.join(", ")} —
++              these contribute zero candidates and will never be assigned. Check the provider id matches
++              what <code>opencode models</code> reports.
++            </p>
++          )}
+           {shown && (
+             <DataTable headers={["slot", "kind", "primary model", "provider", "fit", "capability", "quality", "trusted", "binding"]}>
+               {shown.solve.assignments.map((a) => (

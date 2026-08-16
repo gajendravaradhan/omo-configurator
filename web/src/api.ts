@@ -77,6 +77,11 @@ export interface PricingInfo {
   nextTransition: string; sourceUrl: string; cron: string[];
 }
 
+export interface AvailabilityDiagnostics {
+  modelsPath: string; source: "loaded" | "missing" | "corrupt"; degraded: boolean;
+  providerCount: number; modelCount: number; error?: string; emptyProviders: string[];
+}
+
 export interface SolvePreview {
   assignments: Array<{
     slot: string;
@@ -86,6 +91,7 @@ export interface SolvePreview {
   burn?: BurnForecast[];
   pricing?: string;
   demandSource?: Record<string, string>;
+  availability?: AvailabilityDiagnostics;
 };
     fallbacks: Array<{ model: string; provider: string; fit: number }>;
     rationale: string;

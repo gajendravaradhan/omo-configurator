@@ -104,25 +104,67 @@ export function availabilityFromModelsFile(path: string): {
 }
 
 /** Build Availability from models.json + inventory-declared providers. */
+/**
+ * B2 — how the models cache was read, surfaced so a degraded run is never silent.
+ *
+ * When models.json is missing or corrupt, every model falls back to a default capability and the
+ * quality model collapses to a constant: assignments degenerate to chain-position-only while the
+ * run still reports success. That is the single most dangerous failure mode in this tool, because
+ * the output looks entirely normal. Callers MUST surface `degraded`.
+ */
+export interface AvailabilityDiagnostics {
+  modelsPath: string;
+  /** "loaded" = real catalogue; "missing"/"corrupt" = capability is a constant. */
+  source: "loaded" | "missing" | "corrupt";
+  degraded: boolean;
+  providerCount: number;
+  modelCount: number;
+  error?: string;
+  /** B3 — declared providers that contributed ZERO usable candidates. */
+  emptyProviders: string[];
+}
+
+let lastDiagnostics: AvailabilityDiagnostics | null = null;
+export function availabilityDiagnostics(): AvailabilityDiagnostics | null {
+  return lastDiagnostics;
+}
+
 export function loadAvailability(inventory: Inventory, modelsPathOverride?: string): Availability {
   const modelsByProvider = new Map<string, Set<string>>();
   const metaByProvider = new Map<string, Map<string, ModelMeta>>();
   const modelsPath = modelsPathOverride ?? modelsCachePath();
+  let source: AvailabilityDiagnostics["source"] = "missing";
+  let error: string | undefined;
   if (existsSync(modelsPath)) {
     try {
       const { modelsByProvider: models, metaByProvider: metas } = availabilityFromModelsFile(modelsPath);
       for (const [pid, set] of models) modelsByProvider.set(pid, set);
       for (const [pid, meta] of metas) metaByProvider.set(pid, meta);
-    } catch {
-      // Corrupt/missing cache → fall through to inventory-only availability (report notes this).
+      source = "loaded";
+    } catch (e) {
+      // NOT silent: a corrupt cache degrades every downstream score, so it is recorded and reported.
+      source = "corrupt";
+      error = (e as Error).message;
     }
   }
   // Inventory-declared providers are usable even without a models.json hit (empty set = any model).
+  const emptyProviders: string[] = [];
   for (const pid of Object.keys(inventory.providers)) {
     if (!modelsByProvider.has(pid)) {
       modelsByProvider.set(pid, new Set<string>()); metaByProvider.set(pid, new Map<string, ModelMeta>());
+      // B3: a declared provider with no catalogue entry contributes no scored candidates. This is
+      // how DeepSeek injection used to no-op in total silence — the provider was declared and paid
+      // for, yet never appeared in a single slot.
+      emptyProviders.push(pid);
     }
   }
+
+  let modelCount = 0;
+  for (const set of modelsByProvider.values()) modelCount += set.size;
+  lastDiagnostics = {
+    modelsPath, source, degraded: source !== "loaded",
+    providerCount: modelsByProvider.size, modelCount, error, emptyProviders,
+  };
   // Gate on inventory: only declared providers are selectable.
   return new Availability(modelsByProvider, metaByProvider, new Set(Object.keys(inventory.providers)));
 }

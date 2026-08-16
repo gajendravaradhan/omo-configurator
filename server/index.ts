@@ -15,6 +15,7 @@ import { loadTiers } from "../src/quality.ts";
 import { extractChains, pinnedChainSha, installedOmoVersion, assertOmoVersion } from "../src/chain.ts";
 import { emitOmoConfig, loadPinnedSlots } from "../src/emitter.ts";
 import { enforceBudget, buildDemand, forecastBurn } from "../src/budget.ts";
+import { availabilityDiagnostics } from "../src/availability.ts";
 import { windowTokensMap, windowDollarsMap, windowResetsMap, demandProfile } from "../src/inventory.ts";
 import { pricingStatus, DEEPSEEK_SCHEDULE, cronLines, nextTransition, isPeak } from "../src/pricing.ts";
 import { renderReport } from "../src/report.ts";
@@ -71,6 +72,7 @@ interface SolveResultBundle {
   doctor: Awaited<ReturnType<typeof doctorSoftCheck>>;
   tokenHistory: ReturnType<typeof readTokenHistory>;
   budget: ReturnType<typeof enforceBudget>;
+  availability: ReturnType<typeof availabilityDiagnostics>;
   burn: ReturnType<typeof forecastBurn>;
   pricing: string;
   demandSource: Record<string, string>;
@@ -115,6 +117,7 @@ async function runSolve(i: SolveInputs): Promise<SolveResultBundle> {
   return {
     solve, inventoryNames: Object.keys(inventory.providers), chainSha, installed, tiers, doctor,
     tokenHistory, budget, burn, pricing,
+    availability: availabilityDiagnostics(),
     demandSource: Object.fromEntries(demandSource),
   };
 }
@@ -215,7 +218,7 @@ const server = serve({
         return json({
           assignments: b.solve.assignments, allUntrusted: b.solve.allUntrusted,
           skippedPinned: b.solve.skippedPinned, report,
-          budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource,
+          budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource, availability: b.availability,
         });
       }
 
@@ -333,7 +336,7 @@ const server = serve({
             emit, document, report, doctor: b.doctor, tokenHistory: b.tokenHistory,
             // Budget + pricing surfaced so the UI can show WHY a slot was demoted, and warn when
             // consumption limits are not being enforced at all.
-            budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource,
+            budget: b.budget, burn: b.burn, pricing: b.pricing, demandSource: b.demandSource, availability: b.availability,
           };
         }));
       }

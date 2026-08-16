@@ -7,6 +7,7 @@ import { Badge, CodeBlock, DataTable, MonoChip, Panel, PanelStates, RunButton, T
 interface OptimizeResult {
   solve: { assignments: SolvePreview["assignments"]; allUntrusted: boolean; skippedPinned: string[] };
   budget?: SolvePreview["budget"];
+  availability?: SolvePreview["availability"];
   burn?: SolvePreview["burn"];
   pricing?: string;
   emit: { configPath: string; backupPath: string | null } | null;
@@ -69,6 +70,7 @@ export function OptimizeView() {
     // Omitting them here left `shown.budget` undefined, so the Consumption panel's
     // `empty={!shown?.budget}` never cleared and the spinner ran forever.
     budget: preview.data.budget, burn: preview.data.burn, pricing: preview.data.pricing,
+    availability: preview.data.availability,
   } : null);
 
   return (
@@ -109,6 +111,21 @@ export function OptimizeView() {
         }
       >
         <PanelStates loading={preview.loading} error={preview.error ?? undefined} onRetry={preview.reload} empty={!shown} emptyText="Run a preview or optimize to see assignments">
+          {shown?.availability?.degraded && (
+            <p className="body-sm" style={{ marginBottom: 12 }}>
+              <strong>Model catalogue {shown.availability.source}</strong> at <code>{shown.availability.modelsPath}</code>
+              {shown.availability.error ? ` — ${shown.availability.error}` : ""}. Capability cannot be
+              differentiated without it: every model falls back to a default score and assignments
+              collapse to chain-position-only. Run <code>opencode models</code> to rebuild the cache.
+            </p>
+          )}
+          {(shown?.availability?.emptyProviders?.length ?? 0) > 0 && (
+            <p className="body-sm" style={{ marginBottom: 12 }}>
+              <strong>Providers with no catalogue entry:</strong> {shown!.availability!.emptyProviders.join(", ")} —
+              these contribute zero candidates and will never be assigned. Check the provider id matches
+              what <code>opencode models</code> reports.
+            </p>
+          )}
           {shown && (
             <DataTable headers={["slot", "kind", "primary model", "provider", "fit", "capability", "quality", "trusted", "binding"]}>
               {shown.solve.assignments.map((a) => (
